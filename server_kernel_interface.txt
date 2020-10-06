@@ -1,0 +1,161 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+服务器KERNEL接口文档
+server KERNEL interface
+(时间)
+(维护者)
+(/server/kernel/kernel_interface.h)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+################################################################################
+宏定义（MACRO）
+################################################################################
+可设置参数ID定义：
+#define		KERNEL_CTRL_TIMEZONE					0x0000
+可执行命令ID定义：
+#define		KERNEL_ACTION_REBOOT					0x0000
+
+################################################################################
+数据结构（STRUCT）
+################################################################################
+IOT参数结构体：提供给其他服务器的统一参数接口
+typedef struct kernel_iot_config_t {
+	(待补)
+} kernel_iot_config_t;
+
+################################################################################
+消息（MESSAGE）
+################################################################################
+#define		MSG_KERNEL_BASE						(SERVER_KERNEL<<16)
+#define		MSG_KERNEL_SIGINT					MSG_KERNEL_BASE | 0x0000
+#define		MSG_KERNEL_SIGINT_ACK				MSG_KERNEL_BASE | 0x1000
+#define		MSG_KERNEL_GET_PARA					MSG_KERNEL_BASE | 0x0010
+#define		MSG_KERNEL_GET_PARA_ACK				MSG_KERNEL_BASE | 0x1010
+#define		MSG_KERNEL_SET_PARA					MSG_KERNEL_BASE | 0x0011
+#define		MSG_KERNEL_SET_PARA_ACK				MSG_KERNEL_BASE | 0x1011
+#define		MSG_KERNEL_CTRL_DIRECT				MSG_KERNEL_BASE | 0x0012
+#define		MSG_KERNEL_CTRL_DIRECT_ACK			MSG_KERNEL_BASE | 0x1012
+#define		MSG_KERNEL_ACTION					MSG_KERNEL_BASE | 0x0020
+#define		MSG_KERNEL_ACTION_ACK				MSG_KERNEL_BASE | 0x1020
+#define		MSG_KERNEL_OTA_DOWNLOAD				MSG_KERNEL_BASE | 0x0030
+#define		MSG_KERNEL_OTA_DOWNLOAD_ACK			MSG_KERNEL_BASE | 0x1030
+#define		MSG_KERNEL_OTA_REPORT				MSG_KERNEL_BASE | 0x0031
+#define		MSG_KERNEL_OTA_REPORT_ACK			MSG_KERNEL_BASE | 0x1031
+#define		MSG_KERNEL_OTA_REQUEST				MSG_KERNEL_BASE | 0x0032
+#define		MSG_KERNEL_OTA_REQUEST_ACK			MSG_KERNEL_BASE | 0x1032
+--------------------------------------------------------------------------------
+		MSG_KERNEL_SIGINT
+消息说明：		服务器发送SIGINT系统响应到MANAGER
+发送服务器：		KERNEL
+接受服务器：		MANAGER
+传入参数：		无
+返回消息：		无
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+		MSG_KERNEL_GET_PARA
+消息说明：		从KERNEL服务器获取IOT参数
+发送服务器：		MIIO,MISS,
+接受服务器：		KERNEL
+传入参数：
+	arg_pass:	message_arg_t			回传参数
+返回消息：		必须
+		MSG_KERNEL_GET_PARA_ACK
+传回参数：
+	result:		int						0:成功，其他失败
+	arg_pass:	message_arg_t			回传参数，原样拷贝
+	arg:		*kernel_iot_config_t	结构指针
+	arg_size:	int						arg结构大小
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+		MSG_KERNEL_CTRL_DIRECT
+消息说明：		设置KERNEL服务器的参数，可以在运行状态设置
+发送服务器：		MIIO,MISS,
+接受服务器：		KERNEL
+传入参数：
+	arg_in:		message_arg_t			传入参数
+		cat:	int						需要配置参数的ID（参照上面的参数宏）
+	arg:		void*					需要配置的参数的值
+	arg_size:	int						需要配置的参数的值的大小
+	arg_pass:	message_arg_t			回传参数
+返回消息：		必须
+		MSG_KERNEL_CTRL_DIRECT_ACK
+传回参数：
+	result:		int						0:成功，其他失败
+	arg_pass:	message_arg_t			回传参数，原样拷贝
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+		MSG_KERNEL_ACTION
+消息说明：		运行命令
+发送服务器：		MIIO,MISS,
+接受服务器：		KERNEL
+传入参数：
+	arg_pass:	message_arg_t			回传参数
+	arg_in:		message_arg_t			传入参数
+		cat:	int						执行命令的ID
+返回消息：		必须
+		MSG_KERNEL_ACTION_ACK
+传回参数：
+	result:		int						0:成功，其他失败
+	arg_pass:	message_arg_t			回传参数，原样拷贝
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+		MSG_KERNEL_OTA_DOWNLOAD
+消息说明：		执行OTA下载任务
+发送服务器：		MIIO
+接受服务器：		KERNEL
+传入参数：
+	arg_in:		message_arg_t			传入参数
+		cat:	int						OTA更新的固件类型
+		dog:	int						OTA更新模式
+		chick:	int						OTA更新类型
+		duck:	int						OTA任务ID
+	arg:		char*					URL参数
+	arg_size:	int						URL参数长度
+	extra:		char*					文件MD5
+	extra_size:	int						文件MD5的长度
+返回消息：		必须
+		MSG_KERNEL_OTA_DOWNLOAD_ACK
+传回参数：
+	result:		int						0:成功，其他失败
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+		MSG_KERNEL_OTA_REPORT
+消息说明：		汇报OTA状态
+发送服务器：		KERNEL
+接受服务器：		MIIO
+传入参数：
+	arg_in:		message_arg_t			传入参数
+		cat:	int						OTA状态
+		dog:	int						OTA进度
+		duck:	int						OTA任务ID
+返回消息：		必须
+		MSG_KERNEL_OTA_REPORT_ACK
+传回参数：
+	arg_in:		message_arg_t			传入参数
+		duck:	int						OTA任务ID
+	result:		int						0:成功，其他失败
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+		MSG_KERNEL_OTA_REQUEST
+消息说明：		读取OTA状态
+发送服务器：		MIIO
+接受服务器：		KERNEL
+传入参数：
+	arg_pass:	message_arg_t			回传参数
+	arg_in:		message_arg_t			传入参数
+		duck:	int						OTA任务ID
+返回消息：		必须
+		MSG_KERNEL_OTA_REQUEST_ACK
+传回参数：
+	arg_pass:	message_arg_t			回传参数
+	arg_in:		message_arg_t			传入参数
+		cat:	int						OTA状态
+		dog:	int						OTA进度
+		duck:	int						OTA任务ID
+	result:		int						0:成功，其他失败
+--------------------------------------------------------------------------------
