@@ -16,6 +16,7 @@
 #include <strings.h>
 #include <unistd.h>
 #include <signal.h>
+#include <errno.h>
 //program header
 #include "../../tools/tools_interface.h"
 #include "../../manager/manager_interface.h"
@@ -76,6 +77,23 @@ static int send_iot_ack(message_t *org_msg, message_t *msg, int id, int receiver
 	msg->result = result;
 	msg->arg = arg;
 	msg->arg_size = size;
+	ret = send_message(receiver, msg);
+	/***************************/
+	return ret;
+}
+
+static int send_ota_ack(message_t *org_msg, message_t *msg, int id, int receiver, int result, int status, int progress,int error_msg)
+{
+	int ret = 0;
+    /********message body********/
+	msg_init(msg);
+	memcpy(&(msg->arg_pass), &(org_msg->arg_pass),sizeof(message_arg_t));
+	msg->message = id | 0x1000;
+	msg->sender = msg->receiver = SERVER_MICLOUD;
+	msg->result = result;
+	msg->arg_in.cat = status;
+	msg->arg_in.dog = progress;
+	msg->arg_in.duck = error_msg;
 	ret = send_message(receiver, msg);
 	/***************************/
 	return ret;
@@ -172,6 +190,8 @@ static int my_system(const char * cmd)
 			{
 				log_info("%s", buf);
 			}
+			//fgets(buf, sizeof(buf), fp);
+			//log_info("%s", buf);
 			if ( (res = pclose(fp)) == -1)
 			{
 			log_info("close popen file pointer fp error!\n");
@@ -194,7 +214,6 @@ static int set_timezone(char *arg)
 
 	int ret;
 	char cmd[64]={0};
-	log_info("into func set_timezone arg=%s\n",arg);
     sprintf(cmd, "ln -fs  %s%s  %s", UCLIBC_TIMEZONE_DIR,arg,YOUR_LINK_TIMEZONE_FILE);
 	log_err("set_timezone cmd = %s", cmd);
     ret=my_system(cmd);
@@ -205,21 +224,28 @@ static int set_timezone(char *arg)
 
 static int set_restore()
 {
-	int ret;
-	char cmd[32]={0};
+	int status;
+	char cmdstring[64]={0};
+	char fname[MAX_SYSTEM_STRING_SIZE*2];
 	log_info("into func set_restore \n");
-    sprintf(cmd, "%s  &",RESTORE_SH);
-    ret=my_system(cmd);
-    if(ret == 0)  return 0;
+	memset(fname,0,sizeof(fname));
+	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
+    sprintf(cmdstring, "%s  0  &",fname);
+    status = system(cmdstring);
+    if(status == 0)  return 0;
     else  return -1;
 
 }
 static int set_reboot()
 {
 	int ret;
-	char *cmd="reboot";
+	char cmd[64]={0};
+	char fname[MAX_SYSTEM_STRING_SIZE*2];
 	log_info("into func set_reboot \n");
-    ret=my_system(cmd);
+	memset(fname,0,sizeof(fname));
+	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
+    sprintf(cmd, "%s  3  &",fname);
+    ret=system(cmd);
     if(ret == 0)  return 0;
     else  return -1;
 
@@ -294,59 +320,70 @@ static int server_message_proc(void)
 			}
 			break;
 		case MSG_KERNEL_OTA_DOWNLOAD:
-			if( msg.arg_in.cat == OTA_TYPE_APPLICATION ) {
 				if(msg.arg_in.dog == OTA_MODE_NORMAL)
 				{
 					if(msg.arg_in.chick == OTA_PROC_DNLD)
 					{
-						ret=ota_dowmload_date(msg.arg,msg.arg_size,OTA_TYPE_APPLICATION);
+						log_info("send_iot_ack OTA_PROC_DNLD  ok \n");
+						ret=ota_dowmload_date(msg.arg,msg.arg_size);
 						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
+
 					}
 					if(msg.arg_in.chick == OTA_PROC_INSTALL)
 					{
-						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size,OTA_TYPE_APPLICATION);
+						log_info("send_iot_ack OTA_PROC_INSTALL  ok \n");
+						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
 
 						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
+						log_info("send_iot_ack OTA_PROC_DNLD  ok \n");
 					}
 					if(msg.arg_in.chick == OTA_PROC_DNLD_INSTALL)
 					{
-
-						ret=ota_dowmload_date(msg.arg,msg.arg_size,OTA_TYPE_APPLICATION);
+						//log_info("send_iot_ack OTA_PROC_DNLD_INSTALL  --- \n");
+						ret=ota_dowmload_date(msg.arg,msg.arg_size);
 						if(ret!=0)
 						{
 							log_info("download command execute failed");
 							send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
 						}
 						else {
-						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size,OTA_TYPE_APPLICATION);
+						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
 						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
+						//log_info("send_iot_ack MSG_KERNEL_OTA_DOWNLOAD  ok \n");
 						}
 
 					}
 				}
 				else if(msg.arg_in.dog == OTA_MODE_SILENT){
-					send_iot_ack(&msg, &send_msg, OTA_MODE_SILENT, msg.receiver, ret,0, 0);
+					//send_iot_ack(&msg, &send_msg, OTA_MODE_SILENT, msg.receiver, ret,0, 0);
 				}
 
-
-			}
-			else if( msg.arg_in.cat == OTA_TYPE_MIIO_CLIENT ) {
-				//send_iot_ack(&msg, &send_msg, OTA_TYPE_MIIO_CLIENT, msg.receiver, ret,0, 0);
-			}
-			else if( msg.arg_in.cat == OTA_TYPE_CONFIG ) {
-				//send_iot_ack(&msg, &send_msg, OTA_TYPE_CONFIG, msg.receiver, ret,0, 0);
-			}
 			break;
 		case MSG_KERNEL_OTA_REQUEST:
 			if( msg.arg_in.cat == OTA_INFO_PROGRESS ) {
 				ota_status.progress=kernel_ota_get_progress();
-				send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_REQUEST_ACK, msg.receiver, 0,&ota_status, sizeof(kernel_ota_status_info_t));
-						}
+				ota_status.status=kernel_ota_get_status();
+				ota_status.error_msg = kernel_ota_get_error_msg();
+				send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REQUEST_ACK, msg.receiver, 0, ota_status.status, ota_status.progress,ota_status.error_msg);
+				//log_info("------send_iot_ack  OTA_INFO_PROGRESS  ok \n");
+			}
 			else if( msg.arg_in.cat == OTA_INFO_STATUS ) {
 					ota_status.status=kernel_ota_get_status();
+					ota_status.progress=kernel_ota_get_progress();
 					ota_status.error_msg = kernel_ota_get_error_msg();
-				send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_REQUEST_ACK, msg.receiver, 0,&ota_status, sizeof(kernel_ota_status_info_t));
-						}
+					send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REQUEST_ACK, msg.receiver, 0, ota_status.status, ota_status.progress,ota_status.error_msg);
+					//log_info("------send_iot_ack  OTA_INFO_STATUS  ok \n");
+			}
+			break;
+		case MSG_KERNEL_OTA_REPORT:
+			if( msg.arg_in.cat == OTA_REPORT ) {
+				ota_status.progress=kernel_ota_get_progress();
+				ota_status.status=kernel_ota_get_status();
+				ota_status.error_msg = kernel_ota_get_error_msg();
+				//log_info("ota_status.progress=%d --ota_status.status=%d,ota_status.error_msg=%d\n",ota_status.progress, ota_status.status,ota_status.error_msg);
+				send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REPORT_ACK, msg.receiver, 0, ota_status.status,ota_status.progress,ota_status.error_msg);
+				//log_info("------send_iot_ack  OTA_REPORT  ok \n");
+			}
 			break;
 		default:
 			log_err("not processed message = %d", msg.message);
@@ -424,6 +461,10 @@ static void server_thread_termination(void)
 	manager_message(&msg);
 }
 
+static int server_release(void)
+{
+	return 0;
+}
 /*
  * server entry point
  */
@@ -454,7 +495,7 @@ static void *server_func(void)
 		manager_message(&msg);
 		/***************************/
 	}
-	//server_release();
+	server_release();
 	log_info("-----------thread exit: server_miss-----------");
 	pthread_exit(0);
 }
@@ -474,6 +515,7 @@ int server_kernel_start(void)
 		log_err("kernel server create error! ret = %d",ret);
 		 return ret;
 	 }
+
 	else {
 		log_err("kernel server create successful!");
 		return 0;

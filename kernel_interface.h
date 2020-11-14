@@ -35,6 +35,10 @@
 /*  request  install_status\ install_error_msg\install_progress   */
 #define		MSG_KERNEL_OTA_REQUEST					MSG_KERNEL_BASE | 0x0013
 #define		MSG_KERNEL_OTA_REQUEST_ACK				MSG_KERNEL_BASE | 0x1013
+#define		MSG_KERNEL_OTA_REPORT					MSG_KERNEL_BASE | 0x0014
+#define		MSG_KERNEL_OTA_REPORT_ACK				MSG_KERNEL_BASE | 0x1014
+
+
 
 /*TZ contrl*/
 #define		KERNEL_SET_TZ							0x01
@@ -44,6 +48,7 @@
 /*UPDATE TYPE contrl*/
 #define		OTA_INFO_STATUS 						0x04
 #define		OTA_INFO_PROGRESS 						0x05
+#define		OTA_REPORT		 						0x06
 
 /*
  * structure
