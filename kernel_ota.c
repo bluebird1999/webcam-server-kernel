@@ -53,7 +53,7 @@ static int config_ota_set(void *arg);
 static void *get_progress_thread(void *arg);
 static void *dowm_func(void *arg);
 static void *ota_install_thread(void *arg);
-static int install_failed_report(void);
+static int install_report(void);
 //static int ota_set_status(int model);
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -80,7 +80,7 @@ static int ota_set_status( int model)
 	return ret;
 }
 */
-static int install_failed_report(void)
+static int install_report(void)
 {
 	int ret = 0;
     /********message body********/
@@ -192,7 +192,6 @@ static int my_system(const char * cmd)
 				}
 			 }
  }
-static int mv_ota_datafile(char *dest_path,char * src_path);
 /*
  * interface
  */
@@ -237,10 +236,8 @@ static void *ota_install_thread(void *arg)
 		{
 			usleep (500000);
 			if(config.status == OTA_STATE_INSTALLED)
-				return 0;
+				goto exit;
 			if(config.status == OTA_STATE_FAILED){
-				j++;
-				if(j==60)
 			    	goto exit;
 					}
 			if(config.status == OTA_STATE_DOWNLOADING){
@@ -249,9 +246,7 @@ static void *ota_install_thread(void *arg)
 			    	goto exit;
 				continue;}
 			if(config.status == OTA_STATE_INSTALLING){
-				if(j==60)
 			    	goto exit;
-				continue;}
 			if(config.status == OTA_STATE_WAIT_INSTALL)
 				break;
 		}
@@ -344,7 +339,8 @@ static void *dowm_func(void *arg)
 	FILE *fp=NULL;
 	char cmd[64]={0};
 	int i=0;
-	int res=0; char buf[128]={0};
+	int res=0;
+	char buf[128]={0};
 	log_info("into dowm_func thread\n");
 	//把该线程设置为分离属性
 	pthread_detach(pthread_self());
@@ -431,7 +427,7 @@ static void *get_progress_thread(void *arg)
 	{
 		if(config.status == OTA_STATE_FAILED)
 		{
-			install_failed_report();
+			install_report();
 			ret=ota_config_save();
 			if(ret){
 				log_info("--ota_config_save--- failed\n");
@@ -471,15 +467,14 @@ static void *get_progress_thread(void *arg)
 					if(config.progress==100)
 					{
 						//save config.status
+						install_report();
 						ret=ota_config_save();
 						if(ret){
 							log_info("--ota_config_save--- failed\n");
-							config.status=OTA_STATE_FAILED;
-							config.error_msg = OTA_ERR_INSTALL_ERR;
 							goto exit;
 						}
 						log_info("------------ota_config_save--- ok----------\n");
-						sleep(2);
+						sleep(3);
 						//send reboot cmoman
 						ret=set_reboot();
 						if(ret) {log_info("ota try reboot faile\n"); }
@@ -546,28 +541,31 @@ int kernel_ota_get_progress()
 
 int ota_dowmload_date(char *url,unsigned int ulr_len)
 {
-	int ret;
+	int ret,ret1=0;
 	char cmd[512]={0};
 	pthread_t dowm_id;
 	config.status=OTA_STATE_DOWNLOADING;
 	config.progress=0;
 	config.error_msg=OTA_ERR_NONE;
+	install_failed_report();
+	sleep(2);
 	sprintf(cmd, "wget  -c -t 3 -T 5  -O %s   \"%s\"  2>%s 1>&2   &",OTA_DOWNLOAD_APPLICATION_NAME,url,OTA_WGET_LOG);
 	ret=my_system(cmd);
 	if(ret !=0 ) {
-		config.error_msg=OTA_ERR_DOWN_ERR;
 		log_info("--ota_dowmload_date---my_system error  !---ret=%d\n",ret);
 		return -1;
 	}
-
+	ret1|=ret;
 	ret = pthread_create(&dowm_id, NULL, dowm_func, NULL);
 	if(ret != 0) {
 		log_err("download thread create error! ret = %d",ret);
-		 config.error_msg=OTA_ERR_DOWN_ERR;
 		 return -1;
 	 }
 	log_info("-----ota_dowmload_date end !---ret=%d\n",ret);
-	return 0;
+	ret1|=ret;
+	if(ret1){
+	 config.error_msg=OTA_ERR_DOWN_ERR; }
+	return ret1;
 }
 
  int read_ota_config_file(void)

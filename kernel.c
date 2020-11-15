@@ -331,7 +331,6 @@ static int server_message_proc(void)
 					}
 					if(msg.arg_in.chick == OTA_PROC_INSTALL)
 					{
-						log_info("send_iot_ack OTA_PROC_INSTALL  ok \n");
 						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
 
 						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
