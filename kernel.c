@@ -392,8 +392,6 @@ static int server_message_proc(void)
 	return ret;
 }
 
-
-
 static int config_kernel_read(void)
 {
 	int ret,ret1=0;

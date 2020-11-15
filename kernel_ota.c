@@ -206,6 +206,7 @@ static int creat_get_progress_thread(void)
 		 }
 		return 0;
 }
+
 static int set_reboot()
 {
 	int ret;
@@ -245,7 +246,7 @@ static void *ota_install_thread(void *arg)
 				if(j==60)
 			    	goto exit;
 				continue;}
-			if(config.status == OTA_STATE_INSTALLING){
+			if(config.status == OTA_STATE_INSTALLING)
 			    	goto exit;
 			if(config.status == OTA_STATE_WAIT_INSTALL)
 				break;
@@ -547,7 +548,7 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 	config.status=OTA_STATE_DOWNLOADING;
 	config.progress=0;
 	config.error_msg=OTA_ERR_NONE;
-	install_failed_report();
+	install_report();
 	sleep(2);
 	sprintf(cmd, "wget  -c -t 3 -T 5  -O %s   \"%s\"  2>%s 1>&2   &",OTA_DOWNLOAD_APPLICATION_NAME,url,OTA_WGET_LOG);
 	ret=my_system(cmd);
