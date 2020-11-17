@@ -165,6 +165,7 @@ static int heart_beat_proc(void)
 		msg.sender = msg.receiver = SERVER_KERNEL;
 		msg.arg_in.cat = info.status;
 		msg.arg_in.dog = info.thread_start;
+		msg.arg_in.duck = info.thread_exit;
 		ret = manager_message(&msg);
 		/***************************/
 	}
@@ -340,17 +341,11 @@ static int server_message_proc(void)
 					{
 						//log_info("send_iot_ack OTA_PROC_DNLD_INSTALL  --- \n");
 						ret=ota_dowmload_date(msg.arg,msg.arg_size);
-						if(ret!=0)
-						{
-							log_info("download command execute failed");
-							send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
-						}
-						else {
-						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
+						if(ret ==0){
 						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
+						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
 						//log_info("send_iot_ack MSG_KERNEL_OTA_DOWNLOAD  ok \n");
 						}
-
 					}
 				}
 				else if(msg.arg_in.dog == OTA_MODE_SILENT){
@@ -364,14 +359,14 @@ static int server_message_proc(void)
 				ota_status.status=kernel_ota_get_status();
 				ota_status.error_msg = kernel_ota_get_error_msg();
 				send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REQUEST_ACK, msg.receiver, 0, ota_status.status, ota_status.progress,ota_status.error_msg);
-				//log_info("------send_iot_ack  OTA_INFO_PROGRESS  ok \n");
+				log_info("------send_iot_ack  OTA_INFO_PROGRESS  ok \n");
 			}
 			else if( msg.arg_in.cat == OTA_INFO_STATUS ) {
 					ota_status.status=kernel_ota_get_status();
 					ota_status.progress=kernel_ota_get_progress();
 					ota_status.error_msg = kernel_ota_get_error_msg();
 					send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REQUEST_ACK, msg.receiver, 0, ota_status.status, ota_status.progress,ota_status.error_msg);
-					//log_info("------send_iot_ack  OTA_INFO_STATUS  ok \n");
+					log_info("------send_iot_ack  OTA_INFO_STATUS  ok \n");
 			}
 			break;
 		case MSG_KERNEL_OTA_REPORT:
@@ -381,7 +376,20 @@ static int server_message_proc(void)
 				ota_status.error_msg = kernel_ota_get_error_msg();
 				//log_info("ota_status.progress=%d --ota_status.status=%d,ota_status.error_msg=%d\n",ota_status.progress, ota_status.status,ota_status.error_msg);
 				send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REPORT_ACK, msg.receiver, 0, ota_status.status,ota_status.progress,ota_status.error_msg);
-				//log_info("------send_iot_ack  OTA_REPORT  ok \n");
+				log_info("------send_iot_ack  OTA_REPORT 1111111 ok \n");
+			}
+			break;
+		case MSG_MIIO_PROPERTY_NOTIFY:
+			if( msg.arg_in.cat == MIIO_PROPERTY_CLIENT_STATUS ) {
+				if(msg.arg_in.dog == STATE_CLOUD_CONNECTED)
+					{
+						ota_status.progress=kernel_ota_get_progress();
+						ota_status.status=kernel_ota_get_status();
+						ota_status.error_msg = kernel_ota_get_error_msg();
+						//log_info("ota_status.progress=%d --ota_status.status=%d,ota_status.error_msg=%d\n",ota_status.progress, ota_status.status,ota_status.error_msg);
+						send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REPORT_ACK, msg.receiver, 0, ota_status.status,ota_status.progress,ota_status.error_msg);
+						//log_info("------send_iot_ack  MSG_MIIO_PROPERTY_NOTIFY  OTA_REPORT  ok \n");
+					}
 			}
 			break;
 		default:
@@ -479,7 +487,8 @@ static void *server_func(void)
 	while( !info.exit ) {
 		info.task.func();
 		server_message_proc();
-		heart_beat_proc();
+		if( info.status!=STATUS_ERROR )
+			heart_beat_proc();
 	}
 	if( info.exit ) {
 		while( info.thread_start ) {

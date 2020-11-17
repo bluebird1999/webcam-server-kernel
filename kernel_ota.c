@@ -235,7 +235,7 @@ static void *ota_install_thread(void *arg)
 	pthread_detach(pthread_self());
 	while(1)
 		{
-			usleep (500000);
+			sleep (1);
 			if(config.status == OTA_STATE_INSTALLED)
 				goto exit;
 			if(config.status == OTA_STATE_FAILED){
@@ -270,6 +270,7 @@ static void *ota_install_thread(void *arg)
 			config.error_msg = OTA_ERR_INSTALL_ERR;
 	    	goto exit;
 			}
+		sleep(3);
 		memset(fname,0,sizeof(fname));
 		sprintf(fname,"%s%s",_config_.qcy_path, OTA_UPDARE_SH_PATH);
 		sprintf(cmd, "%s &", fname);
@@ -289,12 +290,13 @@ static void *ota_install_thread(void *arg)
 
 							config.status=OTA_STATE_FAILED;
 							config.error_msg = OTA_ERR_INSTALL_ERR;
+							break;
 									  }
 						else if(strstr(buf,"install success")!=0){
 
 							config.status=OTA_STATE_INSTALLED;
 							config.error_msg = OTA_ERR_NONE;
-							  log_info("---install  ok-----------\n");
+							 log_info("---install  ok-----------\n");
 							  break;
 						 }
 
@@ -303,12 +305,12 @@ static void *ota_install_thread(void *arg)
 				 }
 		if(config.status==OTA_STATE_FAILED)
 		{
+			log_info("-----install failed---\n");
 	    	goto exit;
 		}
-		usleep(500000);
 		config.status=OTA_STATE_IDLE;
+		sleep(1);
 		log_info("------ota_install_fun-----end---\n");
-
 exit:
 		log_qcy(DEBUG_SERIOUS, "-----------thread exit: ota_install_thread-----------");
 		pthread_exit(0);
@@ -321,9 +323,6 @@ int ota_install_fun(char *url,unsigned int ulr_len,char *ota_md5,unsigned int ot
 	int ret;
 	memcpy(config.url,url,ulr_len);
 	memcpy(config.md5,ota_md5,ota_md5_len);
-	creat_get_progress_thread();
-	//if(config.status == OTA_STATE_DOWNLOADING)
-	//	return 0;
 
 	ret=pthread_create(&install_tid,NULL,ota_install_thread,NULL);
 	if(ret != 0) {
@@ -347,7 +346,7 @@ static void *dowm_func(void *arg)
 	pthread_detach(pthread_self());
 #if 1
 	while(i<2){
-	sleep(4);
+	sleep(5);
 	sprintf(cmd, "tail -n 2 %s", OTA_WGET_LOG);
 	if ((fp = popen(cmd, "r") ) == NULL)
 			{
@@ -372,6 +371,7 @@ static void *dowm_func(void *arg)
 							  }
 				if(strstr(buf,"server returned error: HTTP/1.1 416 Requested Range Not Satisfiable")!=0){
 					//文件已经下载
+					config.status = OTA_STATE_DOWNLOADED;
 					res = OTA_ERR_NONE;
 					break;
 							  }
@@ -389,7 +389,7 @@ static void *dowm_func(void *arg)
 					  //无错误
 					  res = OTA_ERR_NONE;
 					  config.status = OTA_STATE_DOWNLOADED;
-					  log_info("---100%  ok-----------\n");
+					  log_info("--down-100%  ok-----------\n");
 					  break;
 				 }
 				 else {
@@ -414,6 +414,7 @@ static void *dowm_func(void *arg)
 				config.status = OTA_STATE_WAIT_INSTALL;
 			}
 			config.error_msg = res;
+			log_qcy(DEBUG_SERIOUS, "-----------thread exit: dowm_func_thread-----------");
 			pthread_exit(0);
 }
 
@@ -468,14 +469,13 @@ static void *get_progress_thread(void *arg)
 					if(config.progress==100)
 					{
 						//save config.status
-						install_report();
 						ret=ota_config_save();
 						if(ret){
 							log_info("--ota_config_save--- failed\n");
 							goto exit;
 						}
 						log_info("------------ota_config_save--- ok----------\n");
-						sleep(3);
+						sleep(4);
 						//send reboot cmoman
 						ret=set_reboot();
 						if(ret) {log_info("ota try reboot faile\n"); }
@@ -489,6 +489,7 @@ static void *get_progress_thread(void *arg)
 	}
 
 exit:
+	log_qcy(DEBUG_SERIOUS, "-----------thread exit: get_progress_thread-----------");
 	 pthread_exit(0);
 
 }
@@ -545,11 +546,16 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 	int ret,ret1=0;
 	char cmd[512]={0};
 	pthread_t dowm_id;
+
+	if(config.status==OTA_STATE_DOWNLOADING || config.status==OTA_STATE_WAIT_INSTALL )
+		return -1;
+
 	config.status=OTA_STATE_DOWNLOADING;
 	config.progress=0;
 	config.error_msg=OTA_ERR_NONE;
+	creat_get_progress_thread();
 	install_report();
-	sleep(2);
+	sleep(3);
 	sprintf(cmd, "wget  -c -t 3 -T 5  -O %s   \"%s\"  2>%s 1>&2   &",OTA_DOWNLOAD_APPLICATION_NAME,url,OTA_WGET_LOG);
 	ret=my_system(cmd);
 	if(ret !=0 ) {
