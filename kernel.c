@@ -214,9 +214,13 @@ static int set_timezone(char *arg)
 {
 
 	int ret;
-	char cmd[64]={0};
-    sprintf(cmd, "ln -fs  %s%s  %s", UCLIBC_TIMEZONE_DIR,arg,YOUR_LINK_TIMEZONE_FILE);
-	log_err("set_timezone cmd = %s", cmd);
+	char cmd[128]={0};
+	char fname[MAX_SYSTEM_STRING_SIZE*4];
+	memset(fname,0,sizeof(fname));
+	snprintf(fname,128,"%s%s",_config_.qcy_path, YOUR_LINK_TIMEZONE_FILE);
+
+    snprintf(cmd,128, "ln -fs  %s%s  %s", UCLIBC_TIMEZONE_DIR,arg,fname);
+	log_qcy(DEBUG_INFO, "set_timezone cmd = %s", cmd);
     ret=my_system(cmd);
     if(ret == 0)  return 0;
     else  return -1;
@@ -228,7 +232,7 @@ static int set_restore()
 	int status;
 	char cmdstring[64]={0};
 	char fname[MAX_SYSTEM_STRING_SIZE*2];
-	log_info("into func set_restore \n");
+	log_qcy(DEBUG_INFO, "into func set_restore \n");
 	memset(fname,0,sizeof(fname));
 	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
     sprintf(cmdstring, "%s  0  &",fname);
@@ -242,7 +246,7 @@ static int set_reboot()
 	int ret;
 	char cmd[64]={0};
 	char fname[MAX_SYSTEM_STRING_SIZE*2];
-	log_info("into func set_reboot \n");
+	log_qcy(DEBUG_INFO, "into func set_reboot \n");
 	memset(fname,0,sizeof(fname));
 	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
     sprintf(cmd, "%s  3  &",fname);
@@ -325,7 +329,7 @@ static int server_message_proc(void)
 				{
 					if(msg.arg_in.chick == OTA_PROC_DNLD)
 					{
-						log_info("send_iot_ack OTA_PROC_DNLD  ok \n");
+						log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD  ok \n");
 						ret=ota_dowmload_date(msg.arg,msg.arg_size);
 						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
 
@@ -359,14 +363,14 @@ static int server_message_proc(void)
 				ota_status.status=kernel_ota_get_status();
 				ota_status.error_msg = kernel_ota_get_error_msg();
 				send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REQUEST_ACK, msg.receiver, 0, ota_status.status, ota_status.progress,ota_status.error_msg);
-				log_info("------send_iot_ack  OTA_INFO_PROGRESS  ok \n");
+				log_qcy(DEBUG_INFO, "------send_iot_ack  OTA_INFO_PROGRESS  ok \n");
 			}
 			else if( msg.arg_in.cat == OTA_INFO_STATUS ) {
 					ota_status.status=kernel_ota_get_status();
 					ota_status.progress=kernel_ota_get_progress();
 					ota_status.error_msg = kernel_ota_get_error_msg();
 					send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REQUEST_ACK, msg.receiver, 0, ota_status.status, ota_status.progress,ota_status.error_msg);
-					log_info("------send_iot_ack  OTA_INFO_STATUS  ok \n");
+					log_qcy(DEBUG_INFO, "------send_iot_ack  OTA_INFO_STATUS  ok \n");
 			}
 			break;
 		case MSG_KERNEL_OTA_REPORT:
@@ -376,7 +380,7 @@ static int server_message_proc(void)
 				ota_status.error_msg = kernel_ota_get_error_msg();
 				//log_info("ota_status.progress=%d --ota_status.status=%d,ota_status.error_msg=%d\n",ota_status.progress, ota_status.status,ota_status.error_msg);
 				send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REPORT_ACK, msg.receiver, 0, ota_status.status,ota_status.progress,ota_status.error_msg);
-				log_info("------send_iot_ack  OTA_REPORT 1111111 ok \n");
+				log_qcy(DEBUG_INFO, "------send_iot_ack  OTA_REPORT 1111111 ok \n");
 			}
 			break;
 		case MSG_MIIO_PROPERTY_NOTIFY:
@@ -393,7 +397,7 @@ static int server_message_proc(void)
 			}
 			break;
 		default:
-			log_err("not processed message = %d", msg.message);
+			log_qcy(DEBUG_INFO, "not processed message = %d", msg.message);
 			break;
 	}
 	msg_free(&msg);
@@ -430,7 +434,7 @@ static void task_default(void)
 			break;
 		case STATUS_SETUP:
 
-		   log_info("create kernel server finished");
+			log_qcy(DEBUG_INFO, "create kernel server finished");
 		    server_set_status(STATUS_TYPE_STATUS, STATUS_IDLE);
 			break;
 		case STATUS_IDLE:
@@ -502,7 +506,7 @@ static void *server_func(void)
 		/***************************/
 	}
 	server_release();
-	log_info("-----------thread exit: server_miss-----------");
+	log_qcy(DEBUG_INFO, "-----------thread exit: server_miss-----------");
 	pthread_exit(0);
 }
 

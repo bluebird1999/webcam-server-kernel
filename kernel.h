@@ -20,7 +20,7 @@
 
 
 #define 	UCLIBC_TIMEZONE_DIR			"/usr/share/zoneinfo/uclibc/"
-#define 	YOUR_LINK_TIMEZONE_FILE		"/opt/TZ"
+#define 	YOUR_LINK_TIMEZONE_FILE		"TZ"
 #define 	RESTORE_SH					"bin/restore.sh"
 /*
  * structure

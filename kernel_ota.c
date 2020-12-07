@@ -270,6 +270,8 @@ static void *ota_install_thread(void *arg)
 			config.error_msg = OTA_ERR_INSTALL_ERR;
 	    	goto exit;
 			}
+
+		install_report();
 		sleep(3);
 		memset(fname,0,sizeof(fname));
 		sprintf(fname,"%s%s",_config_.qcy_path, OTA_UPDARE_SH_PATH);
@@ -308,8 +310,7 @@ static void *ota_install_thread(void *arg)
 			log_info("-----install failed---\n");
 	    	goto exit;
 		}
-		config.status=OTA_STATE_IDLE;
-		sleep(1);
+		sleep(3);
 		log_info("------ota_install_fun-----end---\n");
 exit:
 		log_qcy(DEBUG_SERIOUS, "-----------thread exit: ota_install_thread-----------");
@@ -412,6 +413,7 @@ static void *dowm_func(void *arg)
 			}
 			else {
 				config.status = OTA_STATE_WAIT_INSTALL;
+				sleep(2);
 			}
 			config.error_msg = res;
 			log_qcy(DEBUG_SERIOUS, "-----------thread exit: dowm_func_thread-----------");
@@ -438,54 +440,45 @@ static void *get_progress_thread(void *arg)
 		}
 		if(config.status == OTA_STATE_DOWNLOADING)
 		{
-			if(config.progress < 20)
+			if(config.progress < 40)
 			config.progress=config.progress+1;
 		}
 		if(config.status == OTA_STATE_DOWNLOADED)
 				{
-					if(config.progress < 40)
+					if(config.progress < 80)
 					config.progress=config.progress+1;
 				}
 		if(config.status == OTA_STATE_WAIT_INSTALL)
 				{
-					if(config.progress < 60)
+					if(config.progress < 90)
 					config.progress=config.progress+1;
 				}
 		if(config.status == OTA_STATE_INSTALLING)
 				{
-					if(config.progress < 80)
-					config.progress=config.progress+1;
-				}
-		if(config.status == OTA_STATE_INSTALLED)
-				{
-					if(config.progress < 90)
-					config.progress=config.progress+1;
-				}
-		if(config.status == OTA_STATE_IDLE)
-				{
 					if(config.progress < 100)
 					config.progress=config.progress+1;
 
-					if(config.progress==100)
-					{
-						//save config.status
-						ret=ota_config_save();
-						if(ret){
-							log_info("--ota_config_save--- failed\n");
-							goto exit;
-						}
-						log_info("------------ota_config_save--- ok----------\n");
-						sleep(4);
-						//send reboot cmoman
-						ret=set_reboot();
-						if(ret) {log_info("ota try reboot faile\n"); }
-						break;
-					}
-
-
 				}
-
-		usleep(80000);
+		if(config.status == OTA_STATE_INSTALLED)
+				{
+						if(config.progress==100 )
+							{
+								config.status = OTA_STATE_IDLE;
+								//save config.status
+								ret=ota_config_save();
+								if(ret){
+									log_info("--ota_config_save--- failed\n");
+									goto exit;
+								}
+								log_info("------------ota_config_save--- ok----------\n");
+								sleep(4);
+								//send reboot cmoman
+								ret=set_reboot();
+								if(ret) {log_info("ota try reboot faile\n"); }
+								break;
+							}
+				}
+		usleep(60000);
 	}
 
 exit:
@@ -555,7 +548,7 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 	config.error_msg=OTA_ERR_NONE;
 	creat_get_progress_thread();
 	install_report();
-	sleep(3);
+	sleep(4);
 	sprintf(cmd, "wget  -c -t 3 -T 5  -O %s   \"%s\"  2>%s 1>&2   &",OTA_DOWNLOAD_APPLICATION_NAME,url,OTA_WGET_LOG);
 	ret=my_system(cmd);
 	if(ret !=0 ) {
