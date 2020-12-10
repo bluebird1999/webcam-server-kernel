@@ -23,6 +23,8 @@
 #include "../../manager/manager_interface.h"
 #include "../../tools/tools_interface.h"
 #include "../../server/miio/miio_interface.h"
+#include "../../server/speaker/speaker_interface.h"
+#include "../../server/device/device_interface.h"
 //server heade
 #include "kernel.h"
 #include "kernel_interface.h"
@@ -54,6 +56,7 @@ static void *get_progress_thread(void *arg);
 static void *dowm_func(void *arg);
 static void *ota_install_thread(void *arg);
 static int install_report(void);
+static void ctrl_led_install(int type);
 //static int ota_set_status(int model);
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -64,6 +67,30 @@ static int install_report(void);
 /*
  * helper
  */
+
+static void ctrl_led_install( int type)
+{
+	// 0: installing  1: installed
+	device_iot_config_t  temp_t;
+	log_err("kernelctrl_led_install, type = %d\n",type);
+	message_t message;
+	msg_init(&message);
+	message.sender = message.receiver = SERVER_KERNEL;
+	message.message =MSG_DEVICE_CTRL_DIRECT;
+	message.arg_in.cat = DEVICE_CTRL_LED;
+	if(type)
+	{
+	temp_t.led1_onoff=0;
+	temp_t.led2_onoff=2;
+	}
+	else {
+		temp_t.led1_onoff=0;
+		temp_t.led2_onoff=1;
+	}
+	message.arg = (void*)&temp_t;
+	message.arg_size = sizeof(device_iot_config_t);
+	manager_common_send_message(SERVER_DEVICE,    &message);
+}
 /*
 static int ota_set_status( int model)
 {
@@ -109,12 +136,12 @@ static int ota_config_save(void)
 		return ret;
 	}
 	if( open_config_flag == 1 ) {
-		log_err("int ------------ota_config_save------------ \n");
 		memset(fname,0,sizeof(fname));
 		sprintf(fname,"%s%s",_config_.qcy_path, CONFIG_KERNEL_OTA_PATH);
 		ret = write_config_file(kernel_ota_config_profile_map, fname);
 		if(!ret)
 			open_config_flag=0;
+		log_qcy(DEBUG_SERIOUS,"int ------------ota_config_save------------ \n");
 		ret1|=ret;
 	}
 
@@ -224,13 +251,13 @@ static int set_reboot()
 
 static void *ota_install_thread(void *arg)
 {
-	FILE *fp=NULL;
+	//FILE *fp=NULL;
 	int ret,j=0;
 	char  filemd5[64]={0};
-	char cmd[64]={0};
-	char buf[64]={0};
-	char fname[MAX_SYSTEM_STRING_SIZE*2];
-	log_info("ota_install_thread----------------\n");
+	//char cmd[64]={0};
+	//char buf[64]={0};
+	//char fname[MAX_SYSTEM_STRING_SIZE*2];
+	log_qcy(DEBUG_SERIOUS,"ota_install_thread----------------\n");
 	//把该线程设置为分离属性
 	pthread_detach(pthread_self());
 	while(1)
@@ -244,7 +271,9 @@ static void *ota_install_thread(void *arg)
 			if(config.status == OTA_STATE_DOWNLOADING){
 				j++;
 				if(j==60)
-			    	goto exit;
+				{
+					config.status = OTA_STATE_INSTALLED;
+			    	goto exit;}
 				continue;}
 			if(config.status == OTA_STATE_INSTALLING)
 			    	goto exit;
@@ -254,7 +283,7 @@ static void *ota_install_thread(void *arg)
 		//check ota_file md5
 			ret=Compute_file_md5(OTA_DOWNLOAD_APPLICATION_NAME, filemd5);
 			if(ret) {
-				log_info("----------get OTA_DOWNLOAD_APPLICATION_NAME  md5 faile---------------------\n");
+				log_qcy(DEBUG_SERIOUS,"----------get OTA_DOWNLOAD_APPLICATION_NAME  md5 faile---------------------\n");
 				config.status=OTA_STATE_FAILED;
 				config.error_msg = OTA_ERR_INSTALL_ERR;
 		    	goto exit;
@@ -271,8 +300,21 @@ static void *ota_install_thread(void *arg)
 	    	goto exit;
 			}
 
-		install_report();
+
 		sleep(3);
+		install_report();
+		play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLING);
+		//ctrl_led_install(1);
+		sleep(1);
+		ret=ota_process_main(OTA_DOWNLOAD_APPLICATION_NAME);
+		 if(ret)
+		 {
+				config.status=OTA_STATE_FAILED;
+				log_info("-----install failed---\n");
+			    goto exit;
+		 }
+
+#if  0
 		memset(fname,0,sizeof(fname));
 		sprintf(fname,"%s%s",_config_.qcy_path, OTA_UPDARE_SH_PATH);
 		sprintf(cmd, "%s &", fname);
@@ -305,12 +347,13 @@ static void *ota_install_thread(void *arg)
 					}
 					pclose(fp);
 				 }
-		if(config.status==OTA_STATE_FAILED)
-		{
-			log_info("-----install failed---\n");
-	    	goto exit;
-		}
-		sleep(3);
+
+
+#endif
+
+		sleep(2);
+		config.status=OTA_STATE_INSTALLED;
+		//config.error_msg = OTA_ERR_NONE;
 		log_info("------ota_install_fun-----end---\n");
 exit:
 		log_qcy(DEBUG_SERIOUS, "-----------thread exit: ota_install_thread-----------");
@@ -416,7 +459,7 @@ static void *dowm_func(void *arg)
 				sleep(2);
 			}
 			config.error_msg = res;
-			log_qcy(DEBUG_SERIOUS, "-----------thread exit: dowm_func_thread-----------");
+			log_qcy(DEBUG_SERIOUS, "-----------thread exit: dowm_func_thread--end---------");
 			pthread_exit(0);
 }
 
@@ -433,6 +476,7 @@ static void *get_progress_thread(void *arg)
 		{
 			install_report();
 			ret=ota_config_save();
+			play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLFAILED);
 			if(ret){
 				log_info("--ota_config_save--- failed\n");
 			}
@@ -440,27 +484,23 @@ static void *get_progress_thread(void *arg)
 		}
 		if(config.status == OTA_STATE_DOWNLOADING)
 		{
-			if(config.progress < 40)
+			if(config.progress < 80)
 			config.progress=config.progress+1;
 		}
 		if(config.status == OTA_STATE_DOWNLOADED)
 				{
-					if(config.progress < 80)
+					if(config.progress < 90)
 					config.progress=config.progress+1;
 				}
 		if(config.status == OTA_STATE_WAIT_INSTALL)
 				{
-					if(config.progress < 90)
-					config.progress=config.progress+1;
-				}
-		if(config.status == OTA_STATE_INSTALLING)
-				{
 					if(config.progress < 100)
 					config.progress=config.progress+1;
-
 				}
 		if(config.status == OTA_STATE_INSTALLED)
 				{
+						if(config.progress < 100)
+						config.progress=config.progress+1;
 						if(config.progress==100 )
 							{
 								config.status = OTA_STATE_IDLE;
@@ -470,15 +510,17 @@ static void *get_progress_thread(void *arg)
 									log_info("--ota_config_save--- failed\n");
 									goto exit;
 								}
-								log_info("------------ota_config_save--- ok----------\n");
-								sleep(4);
+								log_qcy(DEBUG_SERIOUS,"------------ota_config_save--- ok----------\n");
+								play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLEND);
+								//ctrl_led_install(0);
+								sleep(3);
 								//send reboot cmoman
 								ret=set_reboot();
-								if(ret) {log_info("ota try reboot faile\n"); }
+								if(ret) {log_qcy(DEBUG_SERIOUS,"ota try reboot faile\n"); }
 								break;
 							}
 				}
-		usleep(60000);
+		usleep(40000);
 	}
 
 exit:
@@ -547,12 +589,12 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 	config.progress=0;
 	config.error_msg=OTA_ERR_NONE;
 	creat_get_progress_thread();
-	install_report();
 	sleep(4);
+	install_report();
 	sprintf(cmd, "wget  -c -t 3 -T 5  -O %s   \"%s\"  2>%s 1>&2   &",OTA_DOWNLOAD_APPLICATION_NAME,url,OTA_WGET_LOG);
 	ret=my_system(cmd);
 	if(ret !=0 ) {
-		log_info("--ota_dowmload_date---my_system error  !---ret=%d\n",ret);
+		log_qcy(DEBUG_SERIOUS, "--ota_dowmload_date---my_system error  !---ret=%d\n",ret);
 		return -1;
 	}
 	ret1|=ret;
@@ -561,7 +603,7 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 		log_err("download thread create error! ret = %d",ret);
 		 return -1;
 	 }
-	log_info("-----ota_dowmload_date end !---ret=%d\n",ret);
+	log_qcy(DEBUG_INFO, "-----ota_dowmload_date end !---ret=%d\n",ret);
 	ret1|=ret;
 	if(ret1){
 	 config.error_msg=OTA_ERR_DOWN_ERR; }
@@ -594,6 +636,16 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 	 			return -1;
 
 
+ }
+ void play_voice(int server_type, int type)
+ {
+ 	log_err("kernel play_voice, type = %d\n", type);
+ 	message_t message;
+ 	msg_init(&message);
+ 	message.sender = message.receiver = server_type;
+ 	message.message = MSG_SPEAKER_CTL_PLAY;
+ 	message.arg_in.cat = type;
+ 	manager_common_send_message(SERVER_SPEAKER,  &message  );
  }
 
 

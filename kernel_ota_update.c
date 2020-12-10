@@ -8,7 +8,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <mtd/mtd-user.h>
-
+#include "../../tools/tools_interface.h"
+#include "../../manager/manager_interface.h"
 #define BUFSIZE (10 * 1024)
 #define CMDLINE_PATH "/proc/cmdline"
 
@@ -82,6 +83,7 @@ static int verify_block(int file_fb, int dev_fb, size_t size, char *file_path, c
 
         size_tmp -= i;
     }
+    return 0;
 }
 
 static int write_block(int file_fb, int dev_fb, size_t size, char *file_path, char *dev_path)
@@ -238,10 +240,10 @@ static int get_update_dev_path(char *dev_path)
 
     if(strstr(buffer, "boot_mode=1"))
     {
-        strncpy(dev_path, "/dev/mtd6", 9);
+        strncpy(dev_path, "/dev/mtd7", 9);
         boot_mode_flag = 1;
     } else {
-        strncpy(dev_path, "/dev/mtd7", 9);
+        strncpy(dev_path, "/dev/mtd8", 9);
         boot_mode_flag = 0;
     }
 
@@ -279,7 +281,7 @@ static int write_flag()
     }
 
 
-    printf("write_flag  cmd = %s\n", cmd);
+	log_qcy(DEBUG_INFO, "write_flag  cmd = %s\n", cmd);
 
     system(cmd);
 
@@ -292,7 +294,7 @@ int ota_process_main(char *arg)
 
     char dev_path[SIZE64];
     char *file_path = arg;
-
+	log_qcy(DEBUG_SERIOUS,"into  ota_process_main----------------\n");
     //find which block need update
     ret = get_update_dev_path(dev_path);
     if(ret)
@@ -311,5 +313,6 @@ int ota_process_main(char *arg)
     }
 
     ret = write_flag();
-    return 0;
+	log_qcy(DEBUG_INFO, "ota_process_main  ret = %d\n",ret);
+    return ret;
 }

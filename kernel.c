@@ -22,6 +22,7 @@
 #include "../../manager/manager_interface.h"
 #include "../../server/miio/miio_interface.h"
 #include "../../server/miss/miss_interface.h"
+#include "../../server/speaker/speaker_interface.h"
 //server header
 #include "kernel.h"
 #include "kernel_interface.h"
@@ -35,10 +36,10 @@
 static server_info_t 		info;
 static kernel_ota_status_info_t		ota_status;
 static message_buffer_t		message;
+static int hang_up_flag=0;
 
 //function
 //common
-static void *server_func(void);
 static int server_message_proc(void);
 static void task_default(void);
 //static void task_error(void);
@@ -47,7 +48,7 @@ static int server_get_status(int type);
 static int server_set_status(int type, int st);
 static void server_thread_termination(void);
 static int send_message(int receiver, message_t *msg);
-static void *server_func(void);
+static void *server_func(void *arg);
 //specific
 static int config_kernel_read(void);
 static int send_iot_ack(message_t *org_msg, message_t *msg, int id, int receiver, int result, void *arg, int size);
@@ -65,7 +66,6 @@ static int my_system(const char * cmd);
  * helper
  */
 //
-
 static int send_iot_ack(message_t *org_msg, message_t *msg, int id, int receiver, int result, void *arg, int size)
 {
 	int ret = 0;
@@ -73,7 +73,7 @@ static int send_iot_ack(message_t *org_msg, message_t *msg, int id, int receiver
 	msg_init(msg);
 	memcpy(&(msg->arg_pass), &(org_msg->arg_pass),sizeof(message_arg_t));
 	msg->message = id | 0x1000;
-	msg->sender = msg->receiver = SERVER_MICLOUD;
+	msg->sender = msg->receiver = SERVER_KERNEL;
 	msg->result = result;
 	msg->arg = arg;
 	msg->arg_size = size;
@@ -89,7 +89,7 @@ static int send_ota_ack(message_t *org_msg, message_t *msg, int id, int receiver
 	msg_init(msg);
 	memcpy(&(msg->arg_pass), &(org_msg->arg_pass),sizeof(message_arg_t));
 	msg->message = id | 0x1000;
-	msg->sender = msg->receiver = SERVER_MICLOUD;
+	msg->sender = msg->receiver = SERVER_KERNEL;
 	msg->result = result;
 	msg->arg_in.cat = status;
 	msg->arg_in.dog = progress;
@@ -236,6 +236,7 @@ static int set_restore()
 	memset(fname,0,sizeof(fname));
 	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
     sprintf(cmdstring, "%s  0  &",fname);
+	play_voice(SERVER_KERNEL, SPEAKER_CTL_RESET);
     status = system(cmdstring);
     if(status == 0)  return 0;
     else  return -1;
@@ -339,14 +340,14 @@ static int server_message_proc(void)
 						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
 
 						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
-						log_info("send_iot_ack OTA_PROC_DNLD  ok \n");
+						log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD  ok \n");
 					}
 					if(msg.arg_in.chick == OTA_PROC_DNLD_INSTALL)
 					{
-						//log_info("send_iot_ack OTA_PROC_DNLD_INSTALL  --- \n");
+						log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD_INSTALL  --- \n");
+						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, 0,0, 0);
 						ret=ota_dowmload_date(msg.arg,msg.arg_size);
 						if(ret ==0){
-						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
 						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
 						//log_info("send_iot_ack MSG_KERNEL_OTA_DOWNLOAD  ok \n");
 						}
@@ -383,16 +384,24 @@ static int server_message_proc(void)
 				log_qcy(DEBUG_INFO, "------send_iot_ack  OTA_REPORT 1111111 ok \n");
 			}
 			break;
-		case MSG_MIIO_PROPERTY_NOTIFY:
+		case MSG_MIIO_PROPERTY_GET_ACK:
+			log_qcy(DEBUG_INFO, "into  kernel  MSG_MIIO_PROPERTY_GET_ACK  from server miio\n");
 			if( msg.arg_in.cat == MIIO_PROPERTY_CLIENT_STATUS ) {
-				if(msg.arg_in.dog == STATE_CLOUD_CONNECTED)
+					if(msg.arg_in.dog == STATE_CLOUD_CONNECTED)
 					{
-						ota_status.progress=kernel_ota_get_progress();
-						ota_status.status=kernel_ota_get_status();
-						ota_status.error_msg = kernel_ota_get_error_msg();
-						//log_info("ota_status.progress=%d --ota_status.status=%d,ota_status.error_msg=%d\n",ota_status.progress, ota_status.status,ota_status.error_msg);
-						send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REPORT_ACK, msg.receiver, 0, ota_status.status,ota_status.progress,ota_status.error_msg);
-						//log_info("------send_iot_ack  MSG_MIIO_PROPERTY_NOTIFY  OTA_REPORT  ok \n");
+						if(info.status == STATUS_NONE )
+						{
+							if(hang_up_flag != 1){
+								ota_status.progress=kernel_ota_get_progress();
+								ota_status.status=kernel_ota_get_status();
+								ota_status.error_msg = kernel_ota_get_error_msg();
+								//log_info("ota_status.progress=%d --ota_status.status=%d,ota_status.error_msg=%d\n",ota_status.progress, ota_status.status,ota_status.error_msg);
+								send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REPORT_ACK, msg.receiver, 0, ota_status.status,ota_status.progress,ota_status.error_msg);
+								//log_info("------send_iot_ack  MSG_MIIO_PROPERTY_NOTIFY  OTA_REPORT  ok \n");
+							}
+							server_set_status(STATUS_TYPE_STATUS, STATUS_WAIT);
+						}
+
 					}
 			}
 			break;
@@ -421,24 +430,35 @@ static int config_kernel_read(void)
 static void task_default(void)
 {
 	int ret = 0;
+	message_t msg;
 	switch( info.status ){
 		case STATUS_NONE:
+			  /********message body********/
+			msg_init(&msg);
+			msg.message = MSG_MIIO_PROPERTY_GET;
+			msg.sender = msg.receiver = SERVER_KERNEL;
+			msg.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
+			server_miio_message(&msg);
+			/****************************/
+			sleep(2);
+			log_qcy(DEBUG_INFO, " kernel task_default  STATUS_NONE");
+			break;
+		case STATUS_WAIT:
+			log_qcy(DEBUG_INFO, " kernel task_default  STATUS_WAIT");
 			//initialization  ota_status
 			memset(&ota_status,0,sizeof(kernel_ota_status_info_t));
 			ret=config_kernel_read();
 			if(!ret)
-			server_set_status(STATUS_TYPE_STATUS, STATUS_WAIT);
-			break;
-		case STATUS_WAIT:
 			server_set_status(STATUS_TYPE_STATUS, STATUS_SETUP);
 			break;
 		case STATUS_SETUP:
-
 			log_qcy(DEBUG_INFO, "create kernel server finished");
-		    server_set_status(STATUS_TYPE_STATUS, STATUS_IDLE);
+		    server_set_status(STATUS_TYPE_STATUS, STATUS_START);
 			break;
 		case STATUS_IDLE:
-			server_set_status(STATUS_TYPE_STATUS, STATUS_START);
+		//	if(hang_up_flag == 1)
+				//server_set_status(STATUS_TYPE_STATUS, STATUS_WAIT);
+			sleep(1);
 			break;
 		case STATUS_START:
 			server_set_status(STATUS_TYPE_STATUS, STATUS_RUN);
@@ -449,6 +469,7 @@ static void task_default(void)
 		case STATUS_STOP:
 			break;
 		case STATUS_RESTART:
+			server_set_status(STATUS_TYPE_STATUS, STATUS_WAIT);
 			break;
 		case STATUS_ERROR:
 		//	info.task.func = task_error;
@@ -477,14 +498,18 @@ static int server_release(void)
 /*
  * server entry point
  */
-static void *server_func(void)
+static void *server_func(void *arg)
 {
     signal(SIGINT, server_thread_termination);
     signal(SIGTERM, server_thread_termination);
 	misc_set_thread_name("server_kernel");
 	pthread_detach(pthread_self());
+	if( !message.init ) {
+		msg_buffer_init(&message, MSG_BUFFER_OVERFLOW_NO);
+	}
 	memset(&info, 0, sizeof(server_info_t));
 	//default task
+	 info.status=STATUS_NONE;
 	info.task.func = task_default;
 	info.task.start = STATUS_NONE;
 	info.task.end = STATUS_RUN;
@@ -497,6 +522,7 @@ static void *server_func(void)
 	if( info.exit ) {
 		while( info.thread_start ) {
 		}
+		hang_up_flag=1;
 	    /********message body********/
 		message_t msg;
 		msg_init(&msg);
@@ -518,16 +544,15 @@ static void *server_func(void)
 int server_kernel_start(void)
 {
 	int ret=-1;
-	msg_buffer_init(&message, MSG_BUFFER_OVERFLOW_NO);
 	pthread_rwlock_init(&info.lock, NULL);
 	ret = pthread_create(&info.id, NULL, server_func, NULL);
 	if(ret != 0) {
-		log_err("kernel server create error! ret = %d",ret);
+		log_qcy(DEBUG_SERIOUS, "kernel server create error! ret = %d",ret);
 		 return ret;
 	 }
 
 	else {
-		log_err("kernel server create successful!");
+		log_qcy(DEBUG_SERIOUS, "kernel server create successful!");
 		return 0;
 	}
 }
@@ -535,8 +560,12 @@ int server_kernel_start(void)
 int server_kernel_message(message_t *msg)
 {
 	int ret=0,ret1;
-	if( server_get_status(STATUS_TYPE_STATUS)!= STATUS_RUN ) {
-		log_err("kernel server is not ready!");
+//	if( server_get_status(STATUS_TYPE_STATUS)!= STATUS_RUN ) {
+//		log_err("kernel server is not ready!");
+//		return -1;
+//	}
+	if( !message.init ) {
+		log_qcy(DEBUG_SERIOUS, "micloud server is not ready for message processing!");
 		return -1;
 	}
 	ret = pthread_rwlock_wrlock(&message.lock);

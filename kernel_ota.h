@@ -11,10 +11,10 @@
  * header
  */
 #include "../../manager/global_interface.h"
-#define 	OTA_DOWNLOAD_APPLICATION_NAME			"/tmp/user_data.zip"
+#define 	OTA_DOWNLOAD_APPLICATION_NAME			"/tmp/qcy_camera_s1pro.bin"
 #define 	OTA_WGET_LOG							"/tmp/wget.log"
 #define 	CONFIG_KERNEL_OTA_PATH					"config/kernel_ota_update.config"
-#define 	OTA_UPDARE_SH_PATH						"bin/update.sh"
+//#define 	OTA_UPDARE_SH_PATH						"bin/update.sh"
 /*
  * define
  */
@@ -42,4 +42,5 @@ int kernel_ota_get_status(void);
 int kernel_ota_get_error_msg(void);
 int kernel_ota_get_progress(void);
 int ota_process_main(char *arg);
+void play_voice(int server_type, int type);
 #endif /* SERVER_KERNEL_KERNEL_OTA_H_ */
