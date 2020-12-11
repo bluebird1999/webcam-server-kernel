@@ -237,6 +237,7 @@ static int set_restore()
 	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
     sprintf(cmdstring, "%s  0  &",fname);
 	play_voice(SERVER_KERNEL, SPEAKER_CTL_RESET);
+	sleep(2);
     status = system(cmdstring);
     if(status == 0)  return 0;
     else  return -1;
