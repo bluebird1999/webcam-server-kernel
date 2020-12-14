@@ -37,6 +37,9 @@ static server_info_t 		info;
 static kernel_ota_status_info_t		ota_status;
 static message_buffer_t		message;
 static int hang_up_flag=0;
+static pthread_rwlock_t		k_lock = PTHREAD_RWLOCK_INITIALIZER;
+static pthread_mutex_t		k_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t		k_cond = PTHREAD_COND_INITIALIZER;
 
 //function
 //common
@@ -46,7 +49,7 @@ static void task_default(void);
 //static int server_release(void);
 static int server_get_status(int type);
 static int server_set_status(int type, int st);
-static void server_thread_termination(void);
+static void server_kernel_thread_termination(int arg);
 static int send_message(int receiver, message_t *msg);
 static void *server_func(void *arg);
 //specific
@@ -286,16 +289,15 @@ static int server_message_proc(void)
 	msg_init(&msg);
 	msg_init(&send_msg);
 	int st;
-	ret = pthread_rwlock_wrlock(&message.lock);
-	if(ret)	{
-		log_err("add message lock fail, ret = %d\n", ret);
-		return ret;
+	//condition
+	pthread_mutex_lock(&k_mutex);
+	if( message.head == message.tail ) {
+		if( (info.status == info.old_status ) ) {
+			pthread_cond_wait(&k_cond,&k_mutex);
+		}
 	}
 	ret = msg_buffer_pop(&message, &msg);
-	ret1 = pthread_rwlock_unlock(&message.lock);
-	if (ret1) {
-		log_err("add message unlock fail, ret = %d\n", ret1);
-	}
+	pthread_mutex_unlock(&k_mutex);
 	if( ret == -1) {
 		msg_free(&msg);
 		return -1;
@@ -305,6 +307,7 @@ static int server_message_proc(void)
 	}
 	switch(msg.message){
 		case MSG_MANAGER_EXIT:
+			log_qcy(DEBUG_INFO, " kernel MSG_MANAGER_EXIT");
 			server_set_status(STATUS_TYPE_EXIT,1);
 			break;
 		case MSG_MANAGER_TIMER_ACK:
@@ -481,7 +484,7 @@ static void task_default(void)
 	return;
 }
 
-static void server_thread_termination(void)
+static void server_kernel_thread_termination(int arg)
 {
 	message_t msg;
     /********message body********/
@@ -490,6 +493,8 @@ static void server_thread_termination(void)
 	msg.sender = msg.receiver = SERVER_KERNEL;
 	/****************************/
 	manager_message(&msg);
+	//info.exit =1;
+	log_qcy(DEBUG_INFO, "----send------info.exit =1;----------");
 }
 
 static int server_release(void)
@@ -501,8 +506,8 @@ static int server_release(void)
  */
 static void *server_func(void *arg)
 {
-    signal(SIGINT, server_thread_termination);
-    signal(SIGTERM, server_thread_termination);
+    signal(SIGINT, server_kernel_thread_termination);
+    signal(SIGTERM, server_kernel_thread_termination);
 	misc_set_thread_name("server_kernel");
 	pthread_detach(pthread_self());
 	if( !message.init ) {
@@ -515,14 +520,13 @@ static void *server_func(void *arg)
 	info.task.start = STATUS_NONE;
 	info.task.end = STATUS_RUN;
 	while( !info.exit ) {
+		info.old_status = info.status;
 		info.task.func();
 		server_message_proc();
 		if( info.status!=STATUS_ERROR )
 			heart_beat_proc();
 	}
 	if( info.exit ) {
-		while( info.thread_start ) {
-		}
 		hang_up_flag=1;
 	    /********message body********/
 		message_t msg;
@@ -533,7 +537,7 @@ static void *server_func(void *arg)
 		/***************************/
 	}
 	server_release();
-	log_qcy(DEBUG_INFO, "-----------thread exit: server_miss-----------");
+	log_qcy(DEBUG_INFO, "-----------thread exit: server_kernel-----------");
 	pthread_exit(0);
 }
 
@@ -572,11 +576,15 @@ int server_kernel_message(message_t *msg)
 	ret = pthread_rwlock_wrlock(&message.lock);
 	if(ret)	{
 		log_err("add message lock fail, ret = %d\n", ret);
+		pthread_rwlock_unlock(&message.lock);
 		return ret;
 	}
 	ret = msg_buffer_push(&message, msg);
 	if( ret!=0 )
 		log_err("message push in kernel error =%d", ret);
+	else {
+		pthread_cond_signal(&k_cond);
+	}
 	ret1 = pthread_rwlock_unlock(&message.lock);
 	if (ret1)
 		log_err("add message unlock fail, ret = %d\n", ret1);

@@ -18,7 +18,7 @@
  * define
  */
 
-#define		SERVER_KERNEL_VERSION_STRING			"alpha-3.5"
+#define		SERVER_KERNEL_VERSION_STRING			"alpha-3.6"
 
 #define		MSG_KERNEL_BASE						   (SERVER_KERNEL<<16)
 #define		MSG_KERNEL_SIGINT						MSG_KERNEL_BASE | 0x0000
