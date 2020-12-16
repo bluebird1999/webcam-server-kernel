@@ -40,7 +40,7 @@ static int hang_up_flag=0;
 static pthread_rwlock_t		k_lock = PTHREAD_RWLOCK_INITIALIZER;
 static pthread_mutex_t		k_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t		k_cond = PTHREAD_COND_INITIALIZER;
-
+static int k_hang_up_flag=0;
 //function
 //common
 static int server_message_proc(void);
@@ -292,7 +292,7 @@ static int server_message_proc(void)
 	//condition
 	pthread_mutex_lock(&k_mutex);
 	if( message.head == message.tail ) {
-		if( (info.status == info.old_status ) ) {
+		if( info.status==STATUS_RUN ) {
 			pthread_cond_wait(&k_cond,&k_mutex);
 		}
 	}
@@ -515,19 +515,18 @@ static void *server_func(void *arg)
 	}
 	memset(&info, 0, sizeof(server_info_t));
 	//default task
-	 info.status=STATUS_NONE;
+	if(k_hang_up_flag==1)    {  info.status=STATUS_WAIT;  }
+	else {
+	info.status=STATUS_NONE;}
 	info.task.func = task_default;
 	info.task.start = STATUS_NONE;
 	info.task.end = STATUS_RUN;
 	while( !info.exit ) {
-		info.old_status = info.status;
 		info.task.func();
 		server_message_proc();
-		if( info.status!=STATUS_ERROR )
-			heart_beat_proc();
 	}
 	if( info.exit ) {
-		hang_up_flag=1;
+		k_hang_up_flag=1;
 	    /********message body********/
 		message_t msg;
 		msg_init(&msg);
@@ -536,6 +535,7 @@ static void *server_func(void *arg)
 		manager_message(&msg);
 		/***************************/
 	}
+	msg_buffer_release(&message);
 	server_release();
 	log_qcy(DEBUG_INFO, "-----------thread exit: server_kernel-----------");
 	pthread_exit(0);
