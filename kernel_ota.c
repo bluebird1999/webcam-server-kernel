@@ -72,6 +72,7 @@ static void ctrl_led_install( int type)
 {
 	// 0: installing  1: installed
 	device_iot_config_t  temp_t;
+	memset(&temp_t,0,sizeof(device_iot_config_t));
 	log_err("kernelctrl_led_install, type = %d\n",type);
 	message_t message;
 	msg_init(&message);
@@ -87,7 +88,7 @@ static void ctrl_led_install( int type)
 		temp_t.led1_onoff=0;
 		temp_t.led2_onoff=1;
 	}
-	message.arg = (void*)&temp_t;
+	message.arg=(void *)&temp_t;
 	message.arg_size = sizeof(device_iot_config_t);
 	manager_common_send_message(SERVER_DEVICE,    &message);
 }
@@ -241,8 +242,8 @@ static int set_reboot()
 	char fname[MAX_SYSTEM_STRING_SIZE*2];
 	log_info("into func set_reboot \n");
 	memset(fname,0,sizeof(fname));
-	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
-    sprintf(cmd, "%s  3  &",fname);
+	snprintf(fname,MAX_SYSTEM_STRING_SIZE*2,"%s%s",_config_.qcy_path, RESTORE_SH);
+    snprintf(cmd,64, "%s  %s  &",fname,REBOOT);
     ret=system(cmd);
     if(ret == 0)  return 0;
     else  return -1;
@@ -254,9 +255,6 @@ static void *ota_install_thread(void *arg)
 	//FILE *fp=NULL;
 	int ret,j=0;
 	char  filemd5[64]={0};
-	//char cmd[64]={0};
-	//char buf[64]={0};
-	//char fname[MAX_SYSTEM_STRING_SIZE*2];
 	log_qcy(DEBUG_SERIOUS,"ota_install_thread----------------\n");
 	//把该线程设置为分离属性
 	pthread_detach(pthread_self());
@@ -300,12 +298,12 @@ static void *ota_install_thread(void *arg)
 	    	goto exit;
 			}
 
-
-		sleep(3);
+		ctrl_led_install(1);
+		log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----start----\n",config.status);
 		install_report();
+		log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----end----\n",config.status);
 		play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLING);
-		//ctrl_led_install(1);
-		sleep(1);
+		sleep(2);
 		ret=ota_process_main(OTA_DOWNLOAD_APPLICATION_NAME);
 		 if(ret)
 		 {
@@ -314,46 +312,10 @@ static void *ota_install_thread(void *arg)
 			    goto exit;
 		 }
 
-#if  0
-		memset(fname,0,sizeof(fname));
-		sprintf(fname,"%s%s",_config_.qcy_path, OTA_UPDARE_SH_PATH);
-		sprintf(cmd, "%s &", fname);
-			if ((fp = popen(cmd, "r") ) == NULL)
-					{
-						perror("popen");
-						config.status=OTA_STATE_FAILED;
-						config.error_msg = OTA_ERR_INSTALL_ERR;
-				    	goto exit;
-					}
-				else
-				 {
-					while(fgets(buf, sizeof(buf), fp))
-					{
-						log_info("install_func buf=%s", buf);
-						if(strstr(buf,"install failed")!=0){
-
-							config.status=OTA_STATE_FAILED;
-							config.error_msg = OTA_ERR_INSTALL_ERR;
-							break;
-									  }
-						else if(strstr(buf,"install success")!=0){
-
-							config.status=OTA_STATE_INSTALLED;
-							config.error_msg = OTA_ERR_NONE;
-							 log_info("---install  ok-----------\n");
-							  break;
-						 }
-
-					}
-					pclose(fp);
-				 }
-
-
-#endif
-
-		sleep(2);
 		config.status=OTA_STATE_INSTALLED;
 		//config.error_msg = OTA_ERR_NONE;
+		install_report();
+		log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----6666666666----\n",config.status);
 		log_info("------ota_install_fun-----end---\n");
 exit:
 		log_qcy(DEBUG_SERIOUS, "-----------thread exit: ota_install_thread-----------");
@@ -406,16 +368,19 @@ static void *dowm_func(void *arg)
 				if(strstr(buf,"server returned error: HTTP/1.1 404 Not Found")!=0){
 					//文件名字错误
 					res = OTA_ERR_DOWN_ERR;
+					log_qcy(DEBUG_SERIOUS, "-------server returned error: HTTP/1.1 404 Not Found------");
 					break;
 							  }
 				if(strstr(buf,"HTTP/1.1 403")!=0){
 					//url没加双引号
 					res = OTA_ERR_DOWN_ERR;
+					log_qcy(DEBUG_SERIOUS, "-------HTTP/1.1 403----");
 					break;
 							  }
 				if(strstr(buf,"server returned error: HTTP/1.1 416 Requested Range Not Satisfiable")!=0){
 					//文件已经下载
 					config.status = OTA_STATE_DOWNLOADED;
+					log_qcy(DEBUG_SERIOUS, "----server returned error: HTTP/1.1 416 Requested Range Not Satisfiable--");
 					res = OTA_ERR_NONE;
 					break;
 							  }
@@ -423,11 +388,13 @@ static void *dowm_func(void *arg)
 				else if(strstr(buf,"bad address")!=0){
 					  //目标地址错误
 					  res =  OTA_ERR_DOWN_ERR;
+						log_qcy(DEBUG_SERIOUS, "------bad address---");
 						break;
 				  }
 				else if(strstr(buf,"can't connect to remote host")!=0){
 					  //网络不可用
 					  res = OTA_ERR_DOWN_ERR;
+					  log_qcy(DEBUG_SERIOUS, "----can't connect to remote host--");
 				  }
 				else if(strstr(buf,"100%")!=0){
 					  //无错误
@@ -480,6 +447,7 @@ static void *get_progress_thread(void *arg)
 			if(ret){
 				log_info("--ota_config_save--- failed\n");
 			}
+			log_qcy(DEBUG_SERIOUS,"----get_progress_thread------config.status == OTA_STATE_FAILED---\n");
 			break;
 		}
 		if(config.status == OTA_STATE_DOWNLOADING)
@@ -512,15 +480,15 @@ static void *get_progress_thread(void *arg)
 								}
 								log_qcy(DEBUG_SERIOUS,"------------ota_config_save--- ok----------\n");
 								play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLEND);
-								//ctrl_led_install(0);
-								sleep(3);
+								ctrl_led_install(0);
+								sleep(1);
 								//send reboot cmoman
 								ret=set_reboot();
 								if(ret) {log_qcy(DEBUG_SERIOUS,"ota try reboot faile\n"); }
 								break;
 							}
 				}
-		usleep(40000);
+		usleep(50000);
 	}
 
 exit:
@@ -589,8 +557,8 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 	config.progress=0;
 	config.error_msg=OTA_ERR_NONE;
 	creat_get_progress_thread();
-	sleep(4);
 	install_report();
+	sleep(4);
 	sprintf(cmd, "wget  -c -t 3 -T 5  -O %s   \"%s\"  2>%s 1>&2   &",OTA_DOWNLOAD_APPLICATION_NAME,url,OTA_WGET_LOG);
 	ret=my_system(cmd);
 	if(ret !=0 ) {

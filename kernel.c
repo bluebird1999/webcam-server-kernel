@@ -22,6 +22,7 @@
 #include "../../manager/manager_interface.h"
 #include "../../server/miio/miio_interface.h"
 #include "../../server/miss/miss_interface.h"
+#include "../../server/audio/audio_interface.h"
 #include "../../server/speaker/speaker_interface.h"
 //server header
 #include "kernel.h"
@@ -219,10 +220,8 @@ static int set_timezone(char *arg)
 	int ret;
 	char cmd[128]={0};
 	char fname[MAX_SYSTEM_STRING_SIZE*4];
-	memset(fname,0,sizeof(fname));
-	snprintf(fname,128,"%s%s",_config_.qcy_path, YOUR_LINK_TIMEZONE_FILE);
 
-    snprintf(cmd,128, "ln -fs  %s%s  %s", UCLIBC_TIMEZONE_DIR,arg,fname);
+    snprintf(cmd,128, "ln -fs  %s%s  %s", UCLIBC_TIMEZONE_DIR,arg,YOUR_LINK_TIMEZONE_FILE);
 	log_qcy(DEBUG_INFO, "set_timezone cmd = %s", cmd);
     ret=my_system(cmd);
     if(ret == 0)  return 0;
@@ -237,10 +236,10 @@ static int set_restore()
 	char fname[MAX_SYSTEM_STRING_SIZE*2];
 	log_qcy(DEBUG_INFO, "into func set_restore \n");
 	memset(fname,0,sizeof(fname));
-	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
-    sprintf(cmdstring, "%s  0  &",fname);
-	play_voice(SERVER_KERNEL, SPEAKER_CTL_RESET);
-	sleep(2);
+	snprintf(fname,MAX_SYSTEM_STRING_SIZE*2,"%s%s",_config_.qcy_path, RESTORE_SH);
+    snprintf(cmdstring,64, "%s  %s  &",fname,RESTORE);
+	//play_voice(SERVER_KERNEL, SPEAKER_CTL_RESET);
+	sleep(1);
     status = system(cmdstring);
     if(status == 0)  return 0;
     else  return -1;
@@ -253,8 +252,9 @@ static int set_reboot()
 	char fname[MAX_SYSTEM_STRING_SIZE*2];
 	log_qcy(DEBUG_INFO, "into func set_reboot \n");
 	memset(fname,0,sizeof(fname));
-	sprintf(fname,"%s%s",_config_.qcy_path, RESTORE_SH);
-    sprintf(cmd, "%s  3  &",fname);
+	snprintf(fname,MAX_SYSTEM_STRING_SIZE*2,"%s%s",_config_.qcy_path, RESTORE_SH);
+    snprintf(cmd,64, "%s  %s  &",fname,REBOOT);
+	sleep(1);
     ret=system(cmd);
     if(ret == 0)  return 0;
     else  return -1;
@@ -283,12 +283,11 @@ static int server_set_status(int type, int st)
 
 static int server_message_proc(void)
 {
-	int ret = 0, ret1 = 0;
+	int ret = 0;
 	message_t msg;
 	message_t send_msg;
 	msg_init(&msg);
 	msg_init(&send_msg);
-	int st;
 	//condition
 	pthread_mutex_lock(&k_mutex);
 	if( message.head == message.tail ) {
@@ -385,11 +384,12 @@ static int server_message_proc(void)
 				ota_status.error_msg = kernel_ota_get_error_msg();
 				//log_info("ota_status.progress=%d --ota_status.status=%d,ota_status.error_msg=%d\n",ota_status.progress, ota_status.status,ota_status.error_msg);
 				send_ota_ack(&msg,&send_msg, MSG_KERNEL_OTA_REPORT_ACK, msg.receiver, 0, ota_status.status,ota_status.progress,ota_status.error_msg);
-				log_qcy(DEBUG_INFO, "------send_iot_ack  OTA_REPORT 1111111 ok \n");
+				log_qcy(DEBUG_INFO, "------send_iot_ack  OTA_REPORT  ok \n");
 			}
 			break;
 		case MSG_MIIO_PROPERTY_GET_ACK:
 			log_qcy(DEBUG_INFO, "into  kernel  MSG_MIIO_PROPERTY_GET_ACK  from server miio\n");
+			log_qcy(DEBUG_INFO, " msg.arg_in.cat =%d  msg.arg_in.dog =%d \n", msg.arg_in.cat,msg.arg_in.dog);
 			if( msg.arg_in.cat == MIIO_PROPERTY_CLIENT_STATUS ) {
 					if(msg.arg_in.dog == STATE_CLOUD_CONNECTED)
 					{
@@ -552,7 +552,7 @@ int server_kernel_start(void)
 	pthread_rwlock_init(&info.lock, NULL);
 	ret = pthread_create(&info.id, NULL, server_func, NULL);
 	if(ret != 0) {
-		log_qcy(DEBUG_SERIOUS, "kernel server create error! ret = %d",ret);
+		log_qcy(DEBUG_SERIOUS, "kernel server pthread_create error! ret = %d",ret);
 		 return ret;
 	 }
 
