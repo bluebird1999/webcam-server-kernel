@@ -278,6 +278,10 @@ static void *ota_install_thread(void *arg)
 			if(config.status == OTA_STATE_WAIT_INSTALL)
 				break;
 		}
+	ctrl_led_install(1);
+	log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----start----\n",config.status);
+	log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----end----\n",config.status);
+	play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLING);
 		//check ota_file md5
 			ret=Compute_file_md5(OTA_DOWNLOAD_APPLICATION_NAME, filemd5);
 			if(ret) {
@@ -298,12 +302,8 @@ static void *ota_install_thread(void *arg)
 	    	goto exit;
 			}
 
-		ctrl_led_install(1);
-		log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----start----\n",config.status);
+		sleep(3);
 		install_report();
-		log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----end----\n",config.status);
-		play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLING);
-		sleep(2);
 		ret=ota_process_main(OTA_DOWNLOAD_APPLICATION_NAME);
 		 if(ret)
 		 {
