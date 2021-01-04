@@ -232,15 +232,25 @@ static int set_timezone(char *arg)
 static int set_restore()
 {
 	int status;
+    message_t msg;
 	char cmdstring[64]={0};
 	char fname[MAX_SYSTEM_STRING_SIZE*2];
-	log_qcy(DEBUG_INFO, "into func set_restore \n");
 	memset(fname,0,sizeof(fname));
 	snprintf(fname,MAX_SYSTEM_STRING_SIZE*2,"%s%s",_config_.qcy_path, RESTORE_SH);
     snprintf(cmdstring,64, "%s  %s  &",fname,RESTORE);
 	//play_voice(SERVER_KERNEL, SPEAKER_CTL_RESET);
 	sleep(1);
     status = system(cmdstring);
+
+        /********message body********/
+    	msg_init(&msg);
+    	msg.message = MSG_KERNEL_SIGINT;
+    	msg.sender = msg.receiver = SERVER_KERNEL;
+    	/****************************/
+    	manager_message(&msg);
+    	//info.exit =1;
+    	log_qcy(DEBUG_INFO, "into func set_restore end \n");
+
     if(status == 0)  return 0;
     else  return -1;
 
@@ -248,14 +258,24 @@ static int set_restore()
 static int set_reboot()
 {
 	int ret;
+    message_t msg;
 	char cmd[64]={0};
 	char fname[MAX_SYSTEM_STRING_SIZE*2];
-	log_qcy(DEBUG_INFO, "into func set_reboot \n");
 	memset(fname,0,sizeof(fname));
 	snprintf(fname,MAX_SYSTEM_STRING_SIZE*2,"%s%s",_config_.qcy_path, RESTORE_SH);
     snprintf(cmd,64, "%s  %s  &",fname,REBOOT);
 	sleep(1);
     ret=system(cmd);
+
+        /********message body********/
+    	msg_init(&msg);
+    	msg.message = MSG_KERNEL_SIGINT;
+    	msg.sender = msg.receiver = SERVER_KERNEL;
+    	/****************************/
+    	manager_message(&msg);
+    	//info.exit =1;
+    	log_qcy(DEBUG_INFO, "into func set_reboot  end\n");
+
     if(ret == 0)  return 0;
     else  return -1;
 
@@ -570,7 +590,7 @@ int server_kernel_message(message_t *msg)
 //		return -1;
 //	}
 	if( !message.init ) {
-		log_qcy(DEBUG_SERIOUS, "micloud server is not ready for message processing!");
+		log_qcy(DEBUG_SERIOUS, "kernel server is not ready for message processing!");
 		return -1;
 	}
 	ret = pthread_rwlock_wrlock(&message.lock);
