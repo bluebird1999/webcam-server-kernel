@@ -24,6 +24,7 @@ static int write_block(int file_fb, int dev_fb, size_t size, char *file_path, ch
 static int get_update_dev_path(char *dev_path);
 static int check_umount(char *dev_path);
 static int write_flag();
+static int get_mtd_num(char *path, int *num);
 
 
 
@@ -216,10 +217,37 @@ error:
     return ret;
 }
 
+static int get_mtd_num(char *path, int *num)
+{
+	FILE *fd = NULL;
+	char buffer[1024] = {0};
+
+	fd = fopen("/proc/mtd", "r");
+	if(!fd)
+	{
+		log_qcy(DEBUG_SERIOUS,"fopen /proc/mtd error\n");
+		return -1;
+	}
+
+	while(fgets(buffer, sizeof(buffer) ,fd))
+	{
+		if(strstr(buffer, path))
+		{
+			*num = (int)(buffer[3] - 48);
+			break;
+		}
+		memset(buffer, 0 , sizeof(buffer));
+	}
+
+	fclose(fd);
+	return 0;
+}
+
 static int get_update_dev_path(char *dev_path)
 {
     int ret;
     int cmdf_fd;
+    int path_num = 0;
 
     cmdf_fd = open(CMDLINE_PATH, O_RDONLY);
     if (cmdf_fd < 0)
@@ -240,13 +268,24 @@ static int get_update_dev_path(char *dev_path)
 
     if(strstr(buffer, "boot_mode=1"))
     {
-        strncpy(dev_path, "/dev/mtd7", 9);
+    	if(get_mtd_num("userdata_a", &path_num))
+    	{
+    		log_qcy(DEBUG_SERIOUS,"get part num error\n");
+    		return -1;
+    	}
+    	snprintf(dev_path, 9, "/dev/mtd%d", path_num);
         boot_mode_flag = 1;
     } else {
-        strncpy(dev_path, "/dev/mtd8", 9);
+    	if(get_mtd_num("userdata_b", &path_num))
+    	{
+    		log_qcy(DEBUG_SERIOUS,"get part num error\n");
+    		return -1;
+    	}
+    	snprintf(dev_path, 9, "/dev/mtd%d", path_num);
         boot_mode_flag = 0;
     }
 
+	log_qcy(DEBUG_INFO,"update dev_path : %s\n",dev_path);
     return 0;
 }
 

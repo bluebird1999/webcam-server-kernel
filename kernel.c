@@ -340,8 +340,8 @@ static int server_message_proc(void)
 			break;
 		case MSG_KERNEL_ACTION:
 			if( msg.arg_in.cat == KERNEL_ACTION_REBOOT ) {
+				send_iot_ack(&msg, &send_msg, MSG_KERNEL_ACTION_ACK, msg.receiver, 0,0, 0);
 				ret = set_reboot();
-				send_iot_ack(&msg, &send_msg, MSG_KERNEL_ACTION_ACK, msg.receiver, ret,0, 0);
 			}
 			else if( msg.arg_in.cat == KERNEL_ACTION_RESTORE ) {
 				ret = set_restore();
