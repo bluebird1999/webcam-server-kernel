@@ -24,6 +24,8 @@
 #include "../../server/miss/miss_interface.h"
 #include "../../server/audio/audio_interface.h"
 #include "../../server/speaker/speaker_interface.h"
+#include "../../server/player/player_interface.h"
+#include "../../server/recorder/recorder_interface.h"
 //server header
 #include "kernel.h"
 #include "kernel_interface.h"
@@ -70,6 +72,7 @@ static int my_system(const char * cmd);
  * helper
  */
 //
+
 static int send_iot_ack(message_t *org_msg, message_t *msg, int id, int receiver, int result, void *arg, int size)
 {
 	int ret = 0;
@@ -193,7 +196,7 @@ static int my_system(const char * cmd)
 		 {
 			while(fgets(buf, sizeof(buf), fp))
 			{
-				log_info("%s", buf);
+				log_info("%s\n", buf);
 			}
 			//fgets(buf, sizeof(buf), fp);
 			//log_info("%s", buf);
@@ -216,18 +219,124 @@ static int my_system(const char * cmd)
 
 static int set_timezone(char *arg)
 {
-
-	int ret;
+	if(arg==NULL) return -1;
+    int ret;
+    char linedata[50]={0};
+    char *tmp_str=NULL;
+    char tmp_str2[8]={0};
+    char tmp_buf[55]={0};
 	char cmd[128]={0};
-	char fname[MAX_SYSTEM_STRING_SIZE*4];
+    FILE *fp=fopen(TIMEZONE_INFO,"r");
+    if(fp ==NULL)  {
+    	log_qcy(DEBUG_INFO, "open   TIMEZONE_INFO failed \n"  );
+    	return -1;
+    }
+    while (fgets(linedata,sizeof(linedata)/sizeof(char)-1,fp))
+    {
+        if (strstr(linedata,arg))
+        {
+        	log_qcy(DEBUG_INFO, "linedata   = %s\n",   linedata  );
+        	tmp_str=strstr(linedata,"UTC");
+        	if(tmp_str ==NULL)  return -1;
+        	int len=strlen(tmp_str)-2; //  "/r-/n"
+        	log_err("--------------len =%d\n", len);
+        	strncpy(tmp_buf,tmp_str,len);
+        	memcpy(tmp_str2,tmp_buf+3,6);
+        	log_err("--------------tmp_str2- = %s", tmp_str2);
+        	if (  (tmp_str=strstr(tmp_str2,"+") ) )
+        	{
+        		if(len>7){
+        			*tmp_str='-';
+					char *p=NULL;
+					char buf1[5]={0};
+					float num_float=0;
+					//sscanf(tmp_str2,"%s:%s",buf1,num_tmp);
+					p=strtok(tmp_str2, ":");
+					printf("----strtok1 p1 = %s\n",p);
+					memcpy(buf1,p,strlen(p));
+					p=strtok(NULL, ":");
+					num_float =  atoi(p)/60.0;
+					int num_tt=(int)(num_float*100);
+					printf("----num_float = = %.2lf\n",num_float);
+					memset(tmp_str2,0,sizeof(tmp_str2));
+					snprintf(tmp_str2,sizeof(tmp_str2),"%s.%d",buf1,num_tt);
 
-    snprintf(cmd,128, "ln -fs  %s%s  %s", UCLIBC_TIMEZONE_DIR,arg,YOUR_LINK_TIMEZONE_FILE);
-	log_qcy(DEBUG_INFO, "set_timezone cmd = %s", cmd);
-    ret=my_system(cmd);
-    if(ret == 0)  return 0;
-    else  return -1;
+
+        		}
+        		else{
+					if( (*(tmp_str+1) !=0) )
+					*tmp_str='-';
+        		}
+        	}
+        	else if(  (tmp_str=strstr(tmp_str2,"-") ) )
+				{
+        				*tmp_str='+';
+        				if(len>7){
+        					char *p=NULL;
+        					char buf1[5]={0};
+        					float num_float=0;
+        					//sscanf(tmp_str2,"%s:%s",buf1,num_tmp);
+        					p=strtok(tmp_str2, ":");
+        					printf("----strtok1 p1 = %s\n",p);
+        					memcpy(buf1,p,strlen(p));
+        					p=strtok(NULL, ":");
+        					num_float =  atoi(p)/60.0;
+        					int num_tt=(int)(num_float*100);
+        					printf("----num_float = = %.2lf\n",num_float);
+        					memset(tmp_str2,0,sizeof(tmp_str2));
+        					snprintf(tmp_str2,sizeof(tmp_str2),"%s.%d",buf1,num_tt);
+							}
+
+				}
+        	log_err("------change--------tmp_str2- = %s", tmp_str2);
+        	log_err("--------------tmp_buf- = %s", tmp_buf);
+        	break;
+        }
+    }
+    fclose(fp);
+    snprintf(cmd,64, "echo  %s  >  %s ",tmp_buf,YOUR_LINK_TIMEZONE_FILE);
+    ret = my_system(cmd);
+
+    if(ret==0){
+
+		 log_err( "system(cmd) = %s  successful!787 \n", cmd);
+		/********message body********/
+		message_t message;
+		msg_init(&message);
+		message.message = MSG_KERNEL_TIMEZONE_CHANGE;
+		message.sender = message.receiver = SERVER_KERNEL;
+		message.arg = (void *)tmp_str2;
+		message.arg_size = sizeof(tmp_str2);
+		server_player_message(&message);
+		server_recorder_message(&message);
+		/***************************/
+		return 0;
+    }
+
+//    fp = fopen(YOUR_LINK_TIMEZONE_FILE,"w+");
+//     if( fputs(tmp_str,fp) !=EOF)
+//     {
+//    	 log_err("fputs(tmp_str,fp) !=EOF66");
+//    	 fflush(fp);
+//    	 fsync(fileno(fp));
+//        /********message body********/
+//    	message_t message;
+//    	msg_init(&message);
+//    	message.message = MSG_KERNEL_TIMEZONE_CHANGE;
+//    	message.sender = message.receiver = SERVER_KERNEL;
+//    	message.arg_in.cat = num;
+//    	server_player_message(&message);
+//    	server_recorder_message(&message);
+//
+//    	/***************************/
+//        fclose(fp);
+//    	return 0;
+//    }
+//    fclose(fp);
+    return -1;
 
 }
+
 
 static int set_restore()
 {

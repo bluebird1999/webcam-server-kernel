@@ -24,6 +24,7 @@
 #define 	RESTORE_SH					"bin/wifi_reset_factory.sh"
 #define 	RESTORE					    "wifi_reset"
 #define 	REBOOT				   		"reboot"
+#define 	TIMEZONE_INFO				"/vconf/timezone.info"
 /*
  * structure
  */
