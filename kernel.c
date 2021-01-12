@@ -226,6 +226,7 @@ static int set_timezone(char *arg)
     char tmp_str2[8]={0};
     char tmp_buf[55]={0};
 	char cmd[128]={0};
+	int num_i=0;
     FILE *fp=fopen(TIMEZONE_INFO,"r");
     if(fp ==NULL)  {
     	log_qcy(DEBUG_INFO, "open   TIMEZONE_INFO failed \n"  );
@@ -239,33 +240,39 @@ static int set_timezone(char *arg)
         	tmp_str=strstr(linedata,"UTC");
         	if(tmp_str ==NULL)  return -1;
         	int len=strlen(tmp_str)-2; //  "/r-/n"
-        	log_err("--------------len =%d\n", len);
+        //	log_err("--------------len =%d\n", len);
         	strncpy(tmp_buf,tmp_str,len);
         	memcpy(tmp_str2,tmp_buf+3,6);
-        	log_err("--------------tmp_str2- = %s", tmp_str2);
+        //log_err("--------------tmp_str2- = %s", tmp_str2);
         	if (  (tmp_str=strstr(tmp_str2,"+") ) )
         	{
         		if(len>7){
-        			*tmp_str='-';
+        			//*tmp_str='-';
 					char *p=NULL;
 					char buf1[5]={0};
 					float num_float=0;
+
 					//sscanf(tmp_str2,"%s:%s",buf1,num_tmp);
-					p=strtok(tmp_str2, ":");
-					printf("----strtok1 p1 = %s\n",p);
+					p=strtok(tmp_str+1, ":");
+				//	printf("----strtok1 p1 = %s\n",p);
 					memcpy(buf1,p,strlen(p));
 					p=strtok(NULL, ":");
 					num_float =  atoi(p)/60.0;
-					int num_tt=(int)(num_float*100);
-					printf("----num_float = = %.2lf\n",num_float);
+					int num_tt=(int)(num_float*10);  //暂时不处理有两位小数的时区
+
+				//	printf("----num_float = = %.2lf\n",num_float);
 					memset(tmp_str2,0,sizeof(tmp_str2));
-					snprintf(tmp_str2,sizeof(tmp_str2),"%s.%d",buf1,num_tt);
-
-
+					snprintf(tmp_str2,sizeof(tmp_str2),"%s%d",buf1,num_tt);
+					num_i=atoi(tmp_str2);
+					num_i=-num_i;
+				//	printf("----num_i  = %d\n",num_i);
         		}
         		else{
-					if( (*(tmp_str+1) !=0) )
-					*tmp_str='-';
+//					if( (*(tmp_str+1) !=0) )
+//					*tmp_str='-';
+        			num_i=atoi(tmp_str+1);
+        			num_i=-(num_i*10);
+        			printf("----num_i  = %d\n",num_i);
         		}
         	}
         	else if(  (tmp_str=strstr(tmp_str2,"-") ) )
@@ -276,20 +283,29 @@ static int set_timezone(char *arg)
         					char buf1[5]={0};
         					float num_float=0;
         					//sscanf(tmp_str2,"%s:%s",buf1,num_tmp);
-        					p=strtok(tmp_str2, ":");
+        					p=strtok(tmp_str+1, ":");
         					printf("----strtok1 p1 = %s\n",p);
         					memcpy(buf1,p,strlen(p));
         					p=strtok(NULL, ":");
         					num_float =  atoi(p)/60.0;
-        					int num_tt=(int)(num_float*100);
+        					int num_tt=(int)(num_float*10);
         					printf("----num_float = = %.2lf\n",num_float);
         					memset(tmp_str2,0,sizeof(tmp_str2));
-        					snprintf(tmp_str2,sizeof(tmp_str2),"%s.%d",buf1,num_tt);
+        					snprintf(tmp_str2,sizeof(tmp_str2),"%s%d",buf1,num_tt);
+        					num_i=atoi(tmp_str2);
+        					//printf("----num_i  = %d\n",num_i);
 							}
+        				else
+        				{
+                			num_i=atoi(tmp_str+1);
+                			num_i=num_i*10;
+                		//	printf("----num_i  = %d\n",num_i);
+        				}
+
 
 				}
-        	log_err("------change--------tmp_str2- = %s", tmp_str2);
-        	log_err("--------------tmp_buf- = %s", tmp_buf);
+        	//log_err("------change--------tmp_str2- = %s", tmp_str2);
+        	log_err("-------num_i  = %d-------tmp_buf- = %s",num_i, tmp_buf);
         	break;
         }
     }
@@ -299,16 +315,23 @@ static int set_timezone(char *arg)
 
     if(ret==0){
 
-		 log_err( "system(cmd) = %s  successful!787 \n", cmd);
+		 log_err( "my_system(cmd) = %s  successful!787 \n", cmd);
 		/********message body********/
 		message_t message;
 		msg_init(&message);
 		message.message = MSG_KERNEL_TIMEZONE_CHANGE;
 		message.sender = message.receiver = SERVER_KERNEL;
-		message.arg = (void *)tmp_str2;
-		message.arg_size = sizeof(tmp_str2);
+		message.arg_in.dog = num_i;
+		//message.arg_size = sizeof(int);
 		server_player_message(&message);
 		server_recorder_message(&message);
+
+		msg_init(&message);
+		message.message = MSG_MANAGER_PROPERTY_SET;
+		message.sender = message.receiver = SERVER_KERNEL;
+		message.arg_in.cat = MANAGER_PROPERTY_TIMEZONE ;
+		message.arg_in.dog = num_i;
+	    manager_common_send_message(SERVER_MANAGER, &message);
 		/***************************/
 		return 0;
     }
