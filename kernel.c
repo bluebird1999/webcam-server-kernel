@@ -370,8 +370,8 @@ static int set_restore()
 	memset(fname,0,sizeof(fname));
 	snprintf(fname,MAX_SYSTEM_STRING_SIZE*2,"%s%s",_config_.qcy_path, RESTORE_SH);
     snprintf(cmdstring,64, "%s  %s  &",fname,RESTORE);
-	//play_voice(SERVER_KERNEL, SPEAKER_CTL_RESET);
-	sleep(1);
+	play_voice(SERVER_KERNEL, SPEAKER_CTL_RESET);
+	sleep(5);
     status = system(cmdstring);
 
         /********message body********/
