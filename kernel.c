@@ -23,7 +23,7 @@
 #include "../../server/miio/miio_interface.h"
 #include "../../server/miss/miss_interface.h"
 #include "../../server/audio/audio_interface.h"
-#include "../../server/speaker/speaker_interface.h"
+//#include "../../server/speaker/speaker_interface.h"
 #include "../../server/player/player_interface.h"
 #include "../../server/recorder/recorder_interface.h"
 //server header

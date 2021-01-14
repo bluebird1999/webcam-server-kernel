@@ -23,7 +23,8 @@
 #include "../../manager/manager_interface.h"
 #include "../../tools/tools_interface.h"
 #include "../../server/miio/miio_interface.h"
-#include "../../server/speaker/speaker_interface.h"
+//#include "../../server/speaker/speaker_interface.h"
+#include "../../server/audio/audio_interface.h"
 #include "../../server/device/device_interface.h"
 //server heade
 #include "kernel.h"
@@ -611,9 +612,9 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
  	message_t message;
  	msg_init(&message);
  	message.sender = message.receiver = server_type;
- 	message.message = MSG_SPEAKER_CTL_PLAY;
+ 	message.message = MSG_AUDIO_SPEAKER_CTL_PLAY;
  	message.arg_in.cat = type;
- 	manager_common_send_message(SERVER_SPEAKER,  &message  );
+ 	manager_common_send_message(SERVER_AUDIO,  &message  );
  }
 
 
