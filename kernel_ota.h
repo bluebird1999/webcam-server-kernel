@@ -42,5 +42,4 @@ int kernel_ota_get_status(void);
 int kernel_ota_get_error_msg(void);
 int kernel_ota_get_progress(void);
 int ota_process_main(char *arg);
-void play_voice(int server_type, int type);
 #endif /* SERVER_KERNEL_KERNEL_OTA_H_ */

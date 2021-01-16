@@ -25,6 +25,7 @@
 #define 	RESTORE					    "wifi_reset"
 #define 	REBOOT				   		"reboot"
 #define 	TIMEZONE_INFO				"/vconf/timezone.info"
+#define     CHECKING_WEBCAM_SH          "bin/checking_webcam.sh"
 /*
  * structure
  */
@@ -33,7 +34,7 @@
  * function
  */
 
-
+int play_voice(int server_type, int type);
 
 
 #endif /* SERVER_KERNEL_KERNEL_H_ */

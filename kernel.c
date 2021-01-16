@@ -62,6 +62,8 @@ static int set_timezone(char *arg);
 static int set_reboot(void);
 static int set_restore(void);
 static int my_system(const char * cmd);
+static int check_webcam_live(void);
+
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -72,6 +74,33 @@ static int my_system(const char * cmd);
  * helper
  */
 //
+
+static int check_webcam_live(void)
+{
+       int ret,p_pid=0;
+       char cmd[64]={0};
+       char fname[MAX_SYSTEM_STRING_SIZE*2];
+       memset(fname,0,sizeof(fname));
+       p_pid=getpid();
+       snprintf(fname,MAX_SYSTEM_STRING_SIZE*2,"%s%s",_config_.qcy_path, CHECKING_WEBCAM_SH);
+       snprintf(cmd,64, "%s  %d  &",fname,p_pid);
+       sleep(1);
+       ret=system(cmd);
+       log_qcy(DEBUG_INFO, "check_webcam_live  ok cmd=%s \n" ,cmd );
+       return ret;
+}
+int play_voice(int server_type, int type)
+{
+	int ret;
+	log_err("kernel play_voice, type = %d\n", type);
+	message_t message;
+	msg_init(&message);
+	message.sender = message.receiver = server_type;
+	message.message = MSG_AUDIO_SPEAKER_CTL_PLAY;
+	message.arg_in.cat = type;
+	ret=manager_common_send_message(SERVER_AUDIO,  &message  );
+	return ret;
+}
 
 static int send_iot_ack(message_t *org_msg, message_t *msg, int id, int receiver, int result, void *arg, int size)
 {
@@ -466,8 +495,8 @@ static int server_message_proc(void)
 			break;
 		case MSG_KERNEL_CTRL_TIMEZONE:
 			if( msg.arg_in.cat == KERNEL_SET_TZ ) {
-				ret = set_timezone(msg.arg);
-				send_iot_ack(&msg, &send_msg, MSG_KERNEL_CTRL_TIMEZONE_ACK, msg.receiver, ret,0, 0);
+				//ret = set_timezone(msg.arg);
+				send_iot_ack(&msg, &send_msg, MSG_KERNEL_CTRL_TIMEZONE_ACK, msg.receiver, 0,0, 0);
 			}
 			break;
 		case MSG_KERNEL_ACTION:
@@ -608,6 +637,7 @@ static void task_default(void)
 			server_set_status(STATUS_TYPE_STATUS, STATUS_SETUP);
 			break;
 		case STATUS_SETUP:
+			if(k_hang_up_flag == 0)  check_webcam_live();
 			log_qcy(DEBUG_INFO, "create kernel server finished");
 		    server_set_status(STATUS_TYPE_STATUS, STATUS_START);
 			break;

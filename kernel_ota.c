@@ -606,15 +606,4 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 
 
  }
- void play_voice(int server_type, int type)
- {
- 	log_err("kernel play_voice, type = %d\n", type);
- 	message_t message;
- 	msg_init(&message);
- 	message.sender = message.receiver = server_type;
- 	message.message = MSG_AUDIO_SPEAKER_CTL_PLAY;
- 	message.arg_in.cat = type;
- 	manager_common_send_message(SERVER_AUDIO,  &message  );
- }
-
 
