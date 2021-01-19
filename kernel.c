@@ -637,7 +637,7 @@ static void task_default(void)
 			server_set_status(STATUS_TYPE_STATUS, STATUS_SETUP);
 			break;
 		case STATUS_SETUP:
-			if(k_hang_up_flag == 0)  check_webcam_live();
+		//	if(k_hang_up_flag == 0)  check_webcam_live();
 			log_qcy(DEBUG_INFO, "create kernel server finished");
 		    server_set_status(STATUS_TYPE_STATUS, STATUS_START);
 			break;

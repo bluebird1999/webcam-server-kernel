@@ -331,7 +331,7 @@ int ota_process_main(char *arg)
 {
     int ret = 0;
 
-    char dev_path[SIZE64];
+    char dev_path[SIZE64]={0};
     char *file_path = arg;
 	log_qcy(DEBUG_SERIOUS,"into  ota_process_main----------------\n");
     //find which block need update
