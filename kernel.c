@@ -62,7 +62,6 @@ static int set_timezone(char *arg);
 static int set_reboot(void);
 static int set_restore(void);
 static int my_system(const char * cmd);
-static int check_webcam_live(void);
 
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -75,20 +74,6 @@ static int check_webcam_live(void);
  */
 //
 
-static int check_webcam_live(void)
-{
-       int ret,p_pid=0;
-       char cmd[64]={0};
-       char fname[MAX_SYSTEM_STRING_SIZE*2];
-       memset(fname,0,sizeof(fname));
-       p_pid=getpid();
-       snprintf(fname,MAX_SYSTEM_STRING_SIZE*2,"%s%s",_config_.qcy_path, CHECKING_WEBCAM_SH);
-       snprintf(cmd,64, "%s  %d  &",fname,p_pid);
-       sleep(1);
-       ret=system(cmd);
-       log_qcy(DEBUG_INFO, "check_webcam_live  ok cmd=%s \n" ,cmd );
-       return ret;
-}
 int play_voice(int server_type, int type)
 {
 	int ret;
@@ -639,7 +624,6 @@ static void task_default(void)
 			server_set_status(STATUS_TYPE_STATUS, STATUS_SETUP);
 			break;
 		case STATUS_SETUP:
-			//if(k_hang_up_flag == 0)  check_webcam_live();
 			log_qcy(DEBUG_INFO, "create kernel server finished");
 		    server_set_status(STATUS_TYPE_STATUS, STATUS_START);
 			break;
