@@ -11,10 +11,11 @@
  * header
  */
 #include "../../manager/global_interface.h"
-#define 	OTA_DOWNLOAD_APPLICATION_NAME			"/tmp/qcy_camera_s1pro.bin"
+#define 	OTA_DOWNLOAD_APPLICATION_NAME			"/tmp/qcy_camera_s1pro.zip"
+#define 	OTA_UPDAT_NAME							"/tmp/oat_update.zip"
 #define 	OTA_WGET_LOG							"/tmp/wget.log"
 #define 	CONFIG_KERNEL_OTA_PATH					"config/kernel_ota_update.config"
-//#define 	OTA_UPDARE_SH_PATH						"bin/update.sh"
+
 /*
  * define
  */
@@ -29,6 +30,8 @@ typedef struct kerbel_ota_config_t {
     int 	mode;
     int 	proc;
     int     error_msg;
+    int    original_length;
+    int    original_data_len;
 } kernel_ota_config_t;
 
 /*
@@ -36,7 +39,7 @@ typedef struct kerbel_ota_config_t {
  */
 
 int ota_dowmload_date(char *url,unsigned int ulr_len);
-int ota_install_fun(char *url,unsigned int ulr_len,char *ota_md5,unsigned int ota_md5_len);
+int ota_install_fun(char *url,unsigned int ulr_len,char *ota_md5,unsigned int ota_md5_len,int original_length);
 int read_ota_config_file(void);
 int kernel_ota_get_status(void);
 int kernel_ota_get_error_msg(void);

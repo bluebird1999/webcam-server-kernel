@@ -510,37 +510,39 @@ static int server_message_proc(void)
 			}
 			break;
 		case MSG_KERNEL_OTA_DOWNLOAD:
-				if(msg.arg_in.dog == OTA_MODE_NORMAL)
-				{
-					if(msg.arg_in.chick == OTA_PROC_DNLD)
-					{
-						log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD  ok \n");
-						ret=ota_dowmload_date(msg.arg,msg.arg_size);
-						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
+			if(msg.arg_in.wolf){
+						if(msg.arg_in.dog == OTA_MODE_NORMAL)
+						{
+							if(msg.arg_in.chick == OTA_PROC_DNLD)
+							{
+								log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD  ok \n");
+								ret=ota_dowmload_date(msg.arg,msg.arg_size);
+								send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
 
-					}
-					if(msg.arg_in.chick == OTA_PROC_INSTALL)
-					{
-						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
+							}
+							if(msg.arg_in.chick == OTA_PROC_INSTALL)
+							{
+								ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size,msg.arg_in.tiger);
 
-						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
-						log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD  ok \n");
-					}
-					if(msg.arg_in.chick == OTA_PROC_DNLD_INSTALL)
-					{
-						log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD_INSTALL  --- \n");
-						send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, 0,0, 0);
-						ret=ota_dowmload_date(msg.arg,msg.arg_size);
-						if(ret ==0){
-						ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size);
-						//log_info("send_iot_ack MSG_KERNEL_OTA_DOWNLOAD  ok \n");
+								send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, ret,0, 0);
+								log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD  ok \n");
+							}
+							if(msg.arg_in.chick == OTA_PROC_DNLD_INSTALL)
+							{
+								log_qcy(DEBUG_INFO, "send_iot_ack OTA_PROC_DNLD_INSTALL  --- \n");
+								send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, 0,0, 0);
+								ret=ota_dowmload_date(msg.arg,msg.arg_size);
+								if(ret ==0){
+								ret=ota_install_fun(msg.arg,msg.arg_size,msg.extra,msg.extra_size,msg.arg_in.tiger);
+								//log_info("send_iot_ack MSG_KERNEL_OTA_DOWNLOAD  ok \n");
+								}
+							}
 						}
-					}
-				}
-				else if(msg.arg_in.dog == OTA_MODE_SILENT){
-					//send_iot_ack(&msg, &send_msg, OTA_MODE_SILENT, msg.receiver, ret,0, 0);
-				}
-
+						else if(msg.arg_in.dog == OTA_MODE_SILENT){
+							//send_iot_ack(&msg, &send_msg, OTA_MODE_SILENT, msg.receiver, ret,0, 0);
+						}
+			}
+			else   send_iot_ack(&msg, &send_msg, MSG_KERNEL_OTA_DOWNLOAD_ACK, msg.receiver, -1,0, 0);
 			break;
 		case MSG_KERNEL_OTA_REQUEST:
 			if( msg.arg_in.cat == OTA_INFO_PROGRESS ) {
@@ -637,7 +639,7 @@ static void task_default(void)
 			server_set_status(STATUS_TYPE_STATUS, STATUS_SETUP);
 			break;
 		case STATUS_SETUP:
-		//	if(k_hang_up_flag == 0)  check_webcam_live();
+			//if(k_hang_up_flag == 0)  check_webcam_live();
 			log_qcy(DEBUG_INFO, "create kernel server finished");
 		    server_set_status(STATUS_TYPE_STATUS, STATUS_START);
 			break;

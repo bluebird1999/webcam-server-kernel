@@ -19,6 +19,11 @@
 #include <json-c/json.h>
 #include <string.h>
 #include <unistd.h>
+#include<unistd.h>
+#include<error.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include<fcntl.h>
 //program header
 #include "../../manager/manager_interface.h"
 #include "../../tools/tools_interface.h"
@@ -33,7 +38,9 @@
 #include "../../tools/log.h"
 #include "kernel_ota.h"
 #include "MD5.h"
+#include "miio_sign_verify.h"
 
+#define ROOT_CERT_PATH		"/mnt/data/MijiaRootCert.pem"
 
 /*
  * static
@@ -59,6 +66,9 @@ static void *ota_install_thread(void *arg);
 static int install_report(void);
 static void ctrl_led_install(int type);
 //static int ota_set_status(int model);
+static int miio_upgrade_get_file(void );
+static int miio_upgrade_check_sign(char *filemd5,int original_length, unsigned char *cert_buf, int certfilelen);
+static int ota_report_manager(int arg);
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -69,12 +79,228 @@ static void ctrl_led_install(int type);
  * helper
  */
 
+static int ota_report_manager(int arg)
+{
+	int ret = 0;
+	static int send_flag=0;
+    /********message body********/
+	message_t message;
+	msg_init(&message);
+	if(arg){
+	message.message = MSG_MANAGER_OTAUPDATE_SERVER_EXIT;
+	message.sender = message.receiver = SERVER_KERNEL;
+	manager_common_send_message(SERVER_MANAGER,    &message);
+	send_flag=1;
+	}
+	else
+	{
+		if(send_flag==1){
+		message.message = MSG_MANAGER_OTAUPDATE_SERVER_WAKEUP;
+		message.sender = message.receiver = SERVER_KERNEL;
+		manager_common_send_message(SERVER_MANAGER,    &message);
+		send_flag=0;
+		}
+	}
+	/***************************/
+	return ret;
+
+}
+
+static int miio_upgrade_check_sign(char *filemd5,int original_length, unsigned char *cert_buf, int certfilelen)
+{
+	ota_ctx_t my_ctx = {0};
+    //my_ctx.root_cert = (unsigned char *)miio_mijia_root_cert;
+    //my_ctx.cert_len = sizeof(miio_mijia_root_cert);
+	strncpy(my_ctx.file_md5, filemd5, strlen(filemd5));
+    my_ctx.signed_file = 1;
+    my_ctx.original_file_len = original_length;
+	//1.1 通过url下载固件，打开DFU文件
+    int index = 0, deep = 1024, count = 0;
+    size_t data_len = 0;
+    unsigned char sn[64] = {0};
+    size_t sn_len = 64;
+    int fd=0 ;
+
+	if(cert_buf == NULL || certfilelen <= 0)
+	{
+		log_qcy(DEBUG_SERIOUS,"cert_buf param error!\n");
+		return -1;
+	}
+
+    my_ctx.root_cert = (unsigned char *)cert_buf;
+    my_ctx.cert_len = certfilelen;
+
+    fd = open(OTA_DOWNLOAD_APPLICATION_NAME, O_RDWR);
+    if (fd < 0) {
+    	log_qcy(DEBUG_SERIOUS,"open %s file failed!\n", OTA_DOWNLOAD_APPLICATION_NAME);
+        return -1;
+    }
+    //获取文件的属性
+    struct stat sb;
+    if ((fstat(fd, &sb)) == -1 ) {
+        perror("fstat");
+        close(fd);
+        return -1;
+    }
+	count = sb.st_size / deep;
+    lseek(fd, 0, SEEK_SET);
+    //printf("dfu len: %ld\n", sb.st_size);
+    unsigned char *buffer;
+	if ((buffer = (unsigned char *)malloc(sb.st_size)) == NULL) {
+		log_qcy(DEBUG_SERIOUS,"malloc sb.st_size  failed  \n");
+        close(fd);
+        return -1;
+    } else {
+        if (sb.st_size != read(fd, buffer, sb.st_size)) {
+        	log_qcy(DEBUG_SERIOUS,"read  ota failed  failed  \n");
+            close(fd);
+            return -1;
+        }
+    }
+
+	log_qcy(DEBUG_INFO,"fileLen: %d,original_length:%d,md5:%s,my_ctx.cert_len:%d\n", sb.st_size,original_length,filemd5,my_ctx.cert_len);
+
+    //printf("%s\n", my_ctx.root_cert);
+	//2.0初始化
+    miio_sign_verify_init(&my_ctx);
+	//2.1连续分段输入固件数据，每一段数据长度
+//2.1连续分段输入固件数据，每一段数据长度
+    for (index = 0; index < count; index ++) {
+        miio_sign_verify_update(buffer + index * deep, deep);
+    }
+    if (index * deep < sb.st_size) {
+        miio_sign_verify_update(buffer + index * deep, sb.st_size - index * deep);
+    }
+	//2.2完成验签，判断是否验签成功
+    if (0 != miio_sign_verify_finish(&data_len, sn, &sn_len)) {
+        free(cert_buf);
+        log_qcy(DEBUG_SERIOUS,"miio_sign_verify_finish Failed! ret \n");
+		return -1;
+    }
+	else {
+        int i = 0;
+        log_qcy(DEBUG_INFO,"---------miio_sign_verify_finish ok, data_len=%d\n", data_len);
+        printf("sn:");
+        for (i = 0; i < sn_len; i ++)
+            printf("%x", sn[i]);
+        printf("\n");
+    }
+    free(buffer);
+
+    lseek(fd, 0, SEEK_SET);
+    int size_f=data_len;
+    int blok_t = 10*1024;
+    int result=0;
+    unsigned char *src=NULL;
+	if ((src = (unsigned char *)malloc(blok_t)) == NULL) {
+		log_qcy(DEBUG_SERIOUS,"malloc data_len ");
+        close(fd);
+        return -1;
+    }
+    int fd2 = open(OTA_UPDAT_NAME, O_SYNC|O_CREAT|O_RDWR);
+    if (fd < 0) {
+    	log_qcy(DEBUG_SERIOUS,"open %s file failed!\n", OTA_UPDAT_NAME);
+        close(fd);
+        close(fd2);
+        free(src);
+        return -1;
+    }
+
+    while(size_f)
+    {
+    	if(size_f < blok_t)  blok_t = size_f;
+
+        result = read(fd,src,blok_t);
+        if (blok_t != result)
+        {
+            if (result < 0)
+            {
+            	log_qcy(DEBUG_SERIOUS,"While reading data from %s\n",OTA_DOWNLOAD_APPLICATION_NAME);
+                return -1;
+            }
+            log_qcy(DEBUG_SERIOUS,"Short read count returned while reading from %s\n",OTA_DOWNLOAD_APPLICATION_NAME);
+            return -1;
+        }
+
+
+    	result=write(fd2,src,blok_t);
+    	if (blok_t != result)
+		{
+			if (result < 0)
+			{
+				log_qcy(DEBUG_SERIOUS,"While writing data from %s\n",OTA_UPDAT_NAME);
+				return -1;
+			}
+			log_qcy(DEBUG_SERIOUS,"Short write count returned while writing from %s\n",OTA_UPDAT_NAME);
+			return -1;
+		}
+    	size_f= size_f - blok_t;
+    }
+
+    remove(OTA_DOWNLOAD_APPLICATION_NAME);
+	free(cert_buf);
+	free(src);
+	close(fd);
+	close(fd2);
+    return data_len;
+}
+
+
+static int miio_upgrade_get_file(void)
+{
+    int ret = 0;
+    int fileTotalLen = 0;
+	FILE *fp;
+	unsigned char *cert_buf = NULL;
+    int certfilelen = 0;
+
+	fp = fopen(ROOT_CERT_PATH, "rb");
+	if(fp == NULL)
+	{
+		log_qcy(DEBUG_SERIOUS,"open %s failed!\n", ROOT_CERT_PATH);
+		return -1;
+	}
+
+	fseek(fp, 0, SEEK_END);
+	certfilelen = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+	if(certfilelen <= 0)
+	{
+		log_qcy(DEBUG_SERIOUS,"%s len error!\n", ROOT_CERT_PATH);
+		fclose(fp);
+		return -1;
+	}
+
+	cert_buf = malloc(certfilelen);
+	if(cert_buf == NULL)
+	{
+		log_qcy(DEBUG_SERIOUS,"cert_buf malloc failed!\n");
+		fclose(fp);
+		return -1;
+	}
+
+	memset(cert_buf,0,certfilelen);
+	ret = fread(cert_buf, 1, certfilelen, fp);
+	if(ret != certfilelen)
+	{
+		log_qcy(DEBUG_SERIOUS,"fread %s error!\n",ROOT_CERT_PATH);
+		fclose(fp);
+		free(cert_buf);
+		return -1;
+	}
+	fclose(fp);
+	config.original_data_len  = miio_upgrade_check_sign(config.md5,config.original_length, cert_buf, certfilelen);
+	//log_qcy(DEBUG_INFO,"int ---------config.original_data_len =%d---------- \n",config.original_data_len);
+	if(config.original_data_len<1)  return -1;
+    return 0;
+}
+
 static void ctrl_led_install( int type)
 {
 	// 0: installing  1: installed
 	device_iot_config_t  temp_t;
 	memset(&temp_t,0,sizeof(device_iot_config_t));
-	log_err("kernelctrl_led_install, type = %d\n",type);
+	log_qcy(DEBUG_INFO,"kernelctrl_led_install, type = %d\n",type);
 	message_t message;
 	msg_init(&message);
 	message.sender = message.receiver = SERVER_KERNEL;
@@ -281,59 +507,44 @@ static void *ota_install_thread(void *arg)
 		}
 	ctrl_led_install(1);
 	log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----start----\n",config.status);
-	log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----end----\n",config.status);
+	config.status = OTA_STATE_INSTALLING;
 	play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLING);
-		//check ota_file md5
-			ret=Compute_file_md5(OTA_DOWNLOAD_APPLICATION_NAME, filemd5);
-			if(ret) {
-				log_qcy(DEBUG_SERIOUS,"----------get OTA_DOWNLOAD_APPLICATION_NAME  md5 faile---------------------\n");
-				config.status=OTA_STATE_FAILED;
-				config.error_msg = OTA_ERR_INSTALL_ERR;
-		    	goto exit;
-			}
-		ret=strcmp(config.md5,filemd5);
-		if(!ret) {
-			log_info("------md5 check ok--------\n");
-			config.status=OTA_STATE_INSTALLING;
-		}
-		else if(ret !=0) {
-			log_info("----------md5 check faile------\n");
+	install_report();
+	sleep(3);
+	miio_upgrade_get_file();
+//************
+//	config.status=OTA_STATE_FAILED;
+//	install_report();
+//	goto exit;
+	ret=ota_process_main(OTA_UPDAT_NAME);
+	 if(ret)
+	 {
 			config.status=OTA_STATE_FAILED;
-			config.error_msg = OTA_ERR_INSTALL_ERR;
-	    	goto exit;
-			}
-
-		sleep(3);
-		install_report();
-		ret=ota_process_main(OTA_DOWNLOAD_APPLICATION_NAME);
-		 if(ret)
-		 {
-				config.status=OTA_STATE_FAILED;
-				log_info("-----install failed---\n");
-			    goto exit;
-		 }
-
+			log_qcy(DEBUG_INFO,"---ota_process_main   --install failed---\n");
+			goto exit;
+	 }
+	 	remove(OTA_UPDAT_NAME);
 		config.status=OTA_STATE_INSTALLED;
-		//config.error_msg = OTA_ERR_NONE;
-		install_report();
-		log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----6666666666----\n",config.status);
-		log_info("------ota_install_fun-----end---\n");
+		config.error_msg = OTA_ERR_NONE;
+		//install_report();
+		play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLEND);
+		ctrl_led_install(0);
 exit:
-		log_qcy(DEBUG_SERIOUS, "-----------thread exit: ota_install_thread-----------");
+log_qcy(DEBUG_SERIOUS, "----thread exit: ota_install_thread----config.status=%d--config.error_msg = %d---\n",config.status,config.error_msg);
 		pthread_exit(0);
 
 }
 
-int ota_install_fun(char *url,unsigned int ulr_len,char *ota_md5,unsigned int ota_md5_len)
+int ota_install_fun(char *url,unsigned int ulr_len,char *ota_md5,unsigned int ota_md5_len,int original_length)
 {
 	pthread_t install_tid;
 	int ret;
 	memcpy(config.url,url,ulr_len);
 	memcpy(config.md5,ota_md5,ota_md5_len);
-
+	config.original_length=original_length;
 	ret=pthread_create(&install_tid,NULL,ota_install_thread,NULL);
 	if(ret != 0) {
-			log_err("installl thread create error! ret = %d",ret);
+		log_qcy(DEBUG_INFO,"installl thread create error! ret = %d",ret);
 			 config.error_msg=OTA_ERR_INSTALL_ERR;
 			 return -1;
 		 }
@@ -352,12 +563,11 @@ static void *dowm_func(void *arg)
 	//把该线程设置为分离属性
 	pthread_detach(pthread_self());
 #if 1
-	while(i<2){
-	sleep(5);
+	while(i<5){
 	sprintf(cmd, "tail -n 2 %s", OTA_WGET_LOG);
 	if ((fp = popen(cmd, "r") ) == NULL)
 			{
-				perror("popen");
+		log_qcy(DEBUG_INFO," popen failed\n");
 				res=OTA_ERR_DOWN_ERR;
 				break;
 			}
@@ -365,7 +575,7 @@ static void *dowm_func(void *arg)
 		 {
 			while(fgets(buf, sizeof(buf), fp))
 			{
-				log_info("dowm_func buf=%s", buf);
+				log_qcy(DEBUG_INFO,"dowm_func buf=%s", buf);
 				if(strstr(buf,"server returned error: HTTP/1.1 404 Not Found")!=0){
 					//文件名字错误
 					res = OTA_ERR_DOWN_ERR;
@@ -401,7 +611,7 @@ static void *dowm_func(void *arg)
 					  //无错误
 					  res = OTA_ERR_NONE;
 					  config.status = OTA_STATE_DOWNLOADED;
-					  log_info("--down-100%  ok-----------\n");
+					  log_qcy(DEBUG_INFO,"--down-100%  ok-----------\n");
 					  break;
 				 }
 				 else {
@@ -415,7 +625,8 @@ static void *dowm_func(void *arg)
 			if( config.status == OTA_STATE_DOWNLOADED)
 				break;
 		 }
-
+	log_qcy(DEBUG_INFO,"-i++   ---dowm_func----\n");
+	sleep(10);
 	}
 #endif
 			if(res != OTA_ERR_NONE)
@@ -424,6 +635,7 @@ static void *dowm_func(void *arg)
 			}
 			else {
 				config.status = OTA_STATE_WAIT_INSTALL;
+				//ota_report_manager(1);
 				sleep(2);
 			}
 			config.error_msg = res;
@@ -434,7 +646,7 @@ static void *dowm_func(void *arg)
 static void *get_progress_thread(void *arg)
 {
 	int ret;
-	log_info("into get_progress_thread\n");
+	log_qcy(DEBUG_INFO,"into get_progress_thread\n");
 	config.progress=0;
 	//把该线程设置为分离属性
 	pthread_detach(pthread_self());
@@ -448,7 +660,11 @@ static void *get_progress_thread(void *arg)
 			if(ret){
 				log_info("--ota_config_save--- failed\n");
 			}
+			remove(OTA_DOWNLOAD_APPLICATION_NAME);
+			remove(OTA_UPDAT_NAME);
 			log_qcy(DEBUG_SERIOUS,"----get_progress_thread------config.status == OTA_STATE_FAILED---\n");
+			//sleep(5);
+			//ota_report_manager(0);
 			break;
 		}
 		if(config.status == OTA_STATE_DOWNLOADING)
@@ -458,7 +674,7 @@ static void *get_progress_thread(void *arg)
 		}
 		if(config.status == OTA_STATE_DOWNLOADED)
 				{
-					if(config.progress < 90)
+					if(config.progress < 95)
 					config.progress=config.progress+1;
 				}
 		if(config.status == OTA_STATE_WAIT_INSTALL)
@@ -480,16 +696,14 @@ static void *get_progress_thread(void *arg)
 									goto exit;
 								}
 								log_qcy(DEBUG_SERIOUS,"------------ota_config_save--- ok----------\n");
-								play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLEND);
-								ctrl_led_install(0);
-								sleep(1);
+								sleep(5);
 								//send reboot cmoman
 								ret=set_reboot();
 								if(ret) {log_qcy(DEBUG_SERIOUS,"ota try reboot faile\n"); }
 								break;
 							}
 				}
-		usleep(50000);
+		usleep(40000);
 	}
 
 exit:
@@ -504,13 +718,13 @@ int kernel_ota_get_status()
 	int ret;
 	ret = pthread_rwlock_wrlock(&lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d", ret);
+		log_qcy(DEBUG_INFO,"add lock fail, ret = %d", ret);
 		return ret;
 	}
 	st = config.status;
 	ret = pthread_rwlock_unlock(&lock);
 	if (ret)
-		log_err("add unlock fail, ret = %d", ret);
+		log_qcy(DEBUG_INFO,"add unlock fail, ret = %d", ret);
 	return st;
 }
 
@@ -520,13 +734,13 @@ int kernel_ota_get_error_msg()
 	int ret;
 	ret = pthread_rwlock_wrlock(&lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d", ret);
+		log_qcy(DEBUG_INFO,"add lock fail, ret = %d", ret);
 		return ret;
 	}
 	st = config.error_msg;
 	ret = pthread_rwlock_unlock(&lock);
 	if (ret)
-		log_err("add unlock fail, ret = %d", ret);
+		log_qcy(DEBUG_INFO,"add unlock fail, ret = %d", ret);
 	return st;
 }
 int kernel_ota_get_progress()
@@ -535,13 +749,13 @@ int kernel_ota_get_progress()
 	int ret;
 	ret = pthread_rwlock_wrlock(&lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d", ret);
+		log_qcy(DEBUG_INFO,"add lock fail, ret = %d", ret);
 		return ret;
 	}
 	st = config.progress;
 	ret = pthread_rwlock_unlock(&lock);
 	if (ret)
-		log_err("add unlock fail, ret = %d", ret);
+		log_qcy(DEBUG_INFO,"add unlock fail, ret = %d", ret);
 	return st;
 }
 
@@ -588,7 +802,7 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 	pthread_rwlock_init(&lock, NULL);
 	ret = pthread_rwlock_wrlock(&lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d", ret);
+		log_qcy(DEBUG_INFO,"add lock fail, ret = %d", ret);
 		return ret;
 	}
 	memset(fname,0,sizeof(fname));
@@ -598,7 +812,7 @@ int ota_dowmload_date(char *url,unsigned int ulr_len)
 	 			open_config_flag=1;
 		 		ret = pthread_rwlock_unlock(&lock);
 		 		if (ret)
-		 			log_err("add unlock fail, ret = %d", ret);
+		 			log_qcy(DEBUG_INFO,"add unlock fail, ret = %d", ret);
 		 		return ret;
 	 		}
 	 		else
