@@ -87,7 +87,7 @@ static int ota_report_manager(int arg)
 	message_t message;
 	msg_init(&message);
 	if(arg){
-	message.message = MSG_MANAGER_OTAUPDATE_SERVER_EXIT;
+	//message.message = MSG_MANAGER_OTAUPDATE_SERVER_EXIT;
 	message.sender = message.receiver = SERVER_KERNEL;
 	manager_common_send_message(SERVER_MANAGER,    &message);
 	send_flag=1;
@@ -95,7 +95,7 @@ static int ota_report_manager(int arg)
 	else
 	{
 		if(send_flag==1){
-		message.message = MSG_MANAGER_OTAUPDATE_SERVER_WAKEUP;
+	//	message.message = MSG_MANAGER_OTAUPDATE_SERVER_WAKEUP;
 		message.sender = message.receiver = SERVER_KERNEL;
 		manager_common_send_message(SERVER_MANAGER,    &message);
 		send_flag=0;
