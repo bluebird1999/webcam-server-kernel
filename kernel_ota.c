@@ -87,19 +87,26 @@ static int ota_report_manager(int arg)
 	message_t message;
 	msg_init(&message);
 	if(arg){
-	//message.message = MSG_MANAGER_OTAUPDATE_SERVER_EXIT;
-	message.sender = message.receiver = SERVER_KERNEL;
-	manager_common_send_message(SERVER_MANAGER,    &message);
-	send_flag=1;
-	}
-	else
-	{
 		if(send_flag==1){
-	//	message.message = MSG_MANAGER_OTAUPDATE_SERVER_WAKEUP;
+		message.message = MSG_MANAGER_PROPERTY_SET;
+		message.arg_in.cat = MANAGER_PROPERTY_SLEEP;
+		message.arg = &arg;
+		message.arg_size = sizeof(int);
 		message.sender = message.receiver = SERVER_KERNEL;
 		manager_common_send_message(SERVER_MANAGER,    &message);
 		send_flag=0;
 		}
+
+	}
+	else
+	{
+		    send_flag=1;
+			message.message = MSG_MANAGER_PROPERTY_SET;
+			message.arg_in.cat = MANAGER_PROPERTY_SLEEP;
+			message.arg = &arg;
+			message.arg_size = sizeof(int);
+			message.sender = message.receiver = SERVER_KERNEL;
+		    manager_common_send_message(SERVER_MANAGER,    &message);
 	}
 	/***************************/
 	return ret;
@@ -508,10 +515,18 @@ static void *ota_install_thread(void *arg)
 	ctrl_led_install(1);
 	log_qcy(DEBUG_SERIOUS, "---------config.status=%d-----start----\n",config.status);
 	config.status = OTA_STATE_INSTALLING;
+	config.error_msg = OTA_ERR_NONE;
 	play_voice(SERVER_KERNEL, SPEAKER_CTL_INSTALLING);
 	install_report();
 	sleep(3);
-	miio_upgrade_get_file();
+	ret=miio_upgrade_get_file();
+	 if(ret)
+	 {
+			config.status=OTA_STATE_FAILED;
+			config.error_msg = OTA_ERR_INSTALL_ERR;
+			log_qcy(DEBUG_INFO,"--miio_upgrade_get_file --install failed---\n");
+			goto exit;
+	 }
 //************
 //	config.status=OTA_STATE_FAILED;
 //	install_report();
@@ -520,6 +535,7 @@ static void *ota_install_thread(void *arg)
 	 if(ret)
 	 {
 			config.status=OTA_STATE_FAILED;
+			config.error_msg = OTA_ERR_INSTALL_ERR;
 			log_qcy(DEBUG_INFO,"---ota_process_main   --install failed---\n");
 			goto exit;
 	 }
@@ -563,7 +579,7 @@ static void *dowm_func(void *arg)
 	//把该线程设置为分离属性
 	pthread_detach(pthread_self());
 #if 1
-	while(i<5){
+	while(i<6){
 	sprintf(cmd, "tail -n 2 %s", OTA_WGET_LOG);
 	if ((fp = popen(cmd, "r") ) == NULL)
 			{
@@ -632,14 +648,16 @@ static void *dowm_func(void *arg)
 			if(res != OTA_ERR_NONE)
 			{
 				config.status = OTA_STATE_FAILED;
+				config.error_msg = res;
 			}
 			else {
 				config.status = OTA_STATE_WAIT_INSTALL;
-				//ota_report_manager(1);
+				config.error_msg = res;
+				//ota_report_manager(0);
 				sleep(2);
 			}
-			config.error_msg = res;
-			log_qcy(DEBUG_SERIOUS, "-----------thread exit: dowm_func_thread--end---------");
+
+			log_qcy(DEBUG_SERIOUS, "-----------thread exit: dowm_func_thread--end-----config.status =%d--config.error_msg =%d--\n",config.status,config.error_msg );
 			pthread_exit(0);
 }
 
@@ -664,7 +682,7 @@ static void *get_progress_thread(void *arg)
 			remove(OTA_UPDAT_NAME);
 			log_qcy(DEBUG_SERIOUS,"----get_progress_thread------config.status == OTA_STATE_FAILED---\n");
 			//sleep(5);
-			//ota_report_manager(0);
+			//ota_report_manager(1);
 			break;
 		}
 		if(config.status == OTA_STATE_DOWNLOADING)
